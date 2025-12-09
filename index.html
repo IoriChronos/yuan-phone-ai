@@ -109,14 +109,15 @@
                                     <span class="chat-unread-total" id="chat-unread-total" style="display:none;"></span>
                                     <div class="chat-title" id="wechat-chat-title"></div>
                                 </div>
-                                <div class="chat-quick">
-                                    <button data-chatquick="pay">转账</button>
-                                    <button data-chatquick="red">红包</button>
-                                </div>
                                 <div class="chat-window-log" id="wechat-chat-log"></div>
                                 <div class="chat-window-input">
+                                    <button id="chat-actions-toggle" aria-label="更多功能">＋</button>
                                     <input id="wechat-chat-input" placeholder="输入消息…" />
                                     <button id="wechat-chat-send">发送</button>
+                                </div>
+                                <div class="chat-actions-panel" id="chat-actions-panel">
+                                    <button data-chataction="pay">转账</button>
+                                    <button data-chataction="red">红包</button>
                                 </div>
                             </div>
                         </div>
@@ -193,8 +194,16 @@
                         <div class="card-block">记忆清单 · 0 条</div>
                     </div>
                 </div>
-            </div> 
-            <div id="home-bar" ></div>
+            </div>
+            <div id="red-envelope-overlay" aria-hidden="true">
+                <div class="red-envelope-card">
+                    <div class="red-envelope-title">红包</div>
+                    <div class="red-envelope-amount" id="red-envelope-amount">¥0.00</div>
+                    <div class="red-envelope-note">点击领取后将发送给对方</div>
+                    <button id="red-envelope-confirm">领取</button>
+                </div>
+            </div>
+            <div id="home-bar"></div>
         </div>
     </aside>
 </div>

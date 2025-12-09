@@ -858,7 +858,7 @@ body.mobile-mode #app {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
     position: relative;
     min-height: 0;
     overflow: hidden;
@@ -1161,25 +1161,29 @@ body.mobile-mode #app {
 }
 
 .wechat-chat-window {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px;
-    background: rgba(0,0,0,0.36);
+    border: none;
+    border-radius: 0;
+    background: #050407;
     display: none;
     flex-direction: column;
-    gap: 8px;
-    min-height: 260px;
-    height: 100%;
-    padding: 0;
+    min-height: 0;
+    flex: 1;
+    width: 100%;
+    align-self: stretch;
+    overflow: hidden;
 }
 .chat-window-head {
     display: flex;
     align-items: center;
-    padding: 6px 8px;
-    gap: 6px;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    gap: 8px;
+    background: rgba(3, 3, 6, 0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .chat-window-head button {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     border-radius: 999px;
     border: 1px solid rgba(255,255,255,0.3);
     background: rgba(0,0,0,0.65);
@@ -1187,9 +1191,10 @@ body.mobile-mode #app {
     cursor: pointer;
 }
 .chat-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 800;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
+    flex: 1;
 }
 .chat-unread-total {
     display: inline-flex;
@@ -1203,29 +1208,17 @@ body.mobile-mode #app {
     font-weight: 800;
     font-size: 11px;
 }
-.chat-quick {
-    display: flex;
-    gap: 6px;
-    padding: 0 8px 6px;
-}
-.chat-quick button {
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08);
-    color: #f6f6f6;
-    font-size: 12px;
-    padding: 6px 10px;
-    cursor: pointer;
-}
 .chat-window-log {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 10px 8px 12px;
-    max-height: none;
+    padding: 12px 10px;
+    background: rgba(24, 18, 28, 0.92);
     overflow: auto;
     scrollbar-width: none;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
 }
 .chat-window-log::-webkit-scrollbar { width:0; height:0; }
 .chat-row {
@@ -1262,9 +1255,9 @@ body.mobile-mode #app {
 .chat-window-input {
     display: flex;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 10px;
     border-top: 1px solid rgba(255,255,255,0.12);
-    background: rgba(0,0,0,0.28);
+    background: rgba(5, 5, 9, 0.9);
     position: sticky;
     bottom: 0;
 }
@@ -1285,6 +1278,46 @@ body.mobile-mode #app {
     color: #ffe9f5;
     padding: 6px 10px;
     font-size: 12px;
+    cursor: pointer;
+}
+.chat-window-input #chat-actions-toggle {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+}
+.chat-window-input #chat-actions-toggle.active {
+    background: rgba(244,182,196,0.25);
+    border-color: rgba(244,182,196,0.6);
+}
+.chat-actions-panel {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 0 10px;
+    background: rgba(4,4,8,0.92);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height .2s ease, padding .2s ease;
+}
+.chat-actions-panel.open {
+    padding: 8px 10px 12px;
+    max-height: 120px;
+}
+.chat-actions-panel button {
+    flex: 1;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #f5f5f5;
+    font-size: 12px;
+    padding: 8px 10px;
     cursor: pointer;
 }
 
@@ -1344,6 +1377,61 @@ body.mobile-mode #app {
     height: 2px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.9);
+}
+
+#red-envelope-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+    z-index: 200;
+}
+#red-envelope-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+.red-envelope-card {
+    width: 70%;
+    max-width: 240px;
+    padding: 20px 16px;
+    border-radius: 20px;
+    background: linear-gradient(160deg, #7b1010, #cb3636);
+    border: 1px solid rgba(255,255,255,0.25);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    color: #ffefe0;
+}
+.red-envelope-title {
+    font-size: 14px;
+    opacity: 0.85;
+}
+.red-envelope-amount {
+    font-size: 28px;
+    font-weight: 800;
+}
+.red-envelope-note {
+    font-size: 12px;
+    opacity: 0.9;
+}
+#red-envelope-confirm {
+    width: 100%;
+    border-radius: 999px;
+    border: none;
+    background: #ffe2a8;
+    color: #7b1010;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 8px 0;
+    cursor: pointer;
 }
 
 body.pc-mode.phone-open #phone-layer {
