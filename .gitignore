@@ -1,0 +1,28 @@
+# macOS system
+.DS_Store
+
+# Android Studio / Gradle
+*.iml
+.gradle/
+build/
+local.properties
+.cache/
+.idea/
+
+# R history
+.Rhistory
+
+# 临时文件/压缩包/文档
+*.pdf
+*.xlsx
+*.zip
+*.rar
+*.docx
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.mov
+
+# 整个 Desktop 不要放项目
+/Desktop/

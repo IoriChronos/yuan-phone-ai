@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Yuan · Story & Phone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+    <!-- 剧情主面板 -->
+    <section id="story-panel">
+        <header id="story-header">
+            <div class="story-title"></div>
+            <div class="story-subtitle">轨迹</div>
+        </header>
+        <main id="story-log">
+            <!-- 之后由 JS 填充对话气泡 -->
+        </main>
+        <footer id="story-input-row">
+            <button id="input-collapse-btn" class="hidden">⌄</button>
+            <textarea id="story-input" rows="2" placeholder="在这里输入给元书的话…"></textarea>
+            <button id="story-send" class="click-anim" >发送</button>
+        </footer>
+    </section>
+
+    <!-- 右侧手机区域（PC 上固定，手机上以弹层方式出现） -->
+    <aside id="phone-layer">
+        <div id="phone-shell" class="phone-pack">
+
+
+                <div id="status-bar">
+                    <div class="sb-left">
+                        <div class="signal"></div>          
+                        <div class="carrier">Yuan</div>
+                        <div id="sb-time">08:18</div>   <!-- 时间放这里 -->
+                    </div>
+                    <div class="sb-right">
+                        <div class="battery">
+                            <div class="battery-level" id="bat-level"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="dynamic-island" class="collapsed">
+                    <div class="island-content">···</div>
+                    <div class="unlock-ring"></div>
+                    <div class="unlock-face">🙂</div>
+                    <div class="unlock-check">✅</div>
+                </div>
+            <div id="phone">
+
+
+                <!-- 首页：图标 -->
+                <div id="home-screen">
+                    <div class="app-icon" data-target="wechat-page">
+                        <div class="icon"></div>
+                        <p>微信</p>
+                    </div>
+                    <div class="app-icon" data-target="call-page">
+                        <div class="icon"></div>
+                        <p>电话</p>
+                    </div>
+                    <div class="app-icon" data-target="darkfog-page">
+                        <div class="icon"></div>
+                        <p>黑雾</p>
+                    </div>
+                    <div class="app-icon" data-target="watch-page">
+                        <div class="icon"></div>
+                        <p>守望</p>
+                    </div>
+                    <div class="app-icon" data-target="heart-page">
+                        <div class="icon"></div>
+                        <p>心率</p>
+                    </div>
+                    <div class="app-icon" data-target="settings-page">
+                        <div class="icon"></div>
+                        <p>设置</p>
+                    </div>
+                </div>
+
+                <!-- 微信页面 -->
+                <div id="wechat-page" class="app-page" style="display:none;">
+                    <div class="page-header">
+                        <button class="back-home">‹</button>
+                        <div class="wechat-top" id="wechat-top">Wechat (3)</div>
+                    </div>
+                    <div class="app-scroll wechat-body">
+                        <div class="wechat-content">
+                            <div class="wechat-panel" id="wechat-chats"></div>
+                            <div class="wechat-panel wechat-moments-wrap" id="wechat-moments" style="display:none;">
+                                <div class="moments-hero">
+                                    <div class="moments-cover"></div>
+                                    <div class="moments-avatar"></div>
+                                </div>
+                                <div class="moments-feed-inner" id="wechat-moments-feed"></div>
+                            </div>
+                            <div class="wechat-panel" id="wechat-wallet" style="display:none;">
+                                <div class="wallet-balance">
+                                    <div class="label">零钱</div>
+                                    <div class="value" id="wallet-balance-amt">¥ 2,180.00</div>
+                                    <div class="sub">最近到账：来自「元书」¥1314.00</div>
+                                </div>
+                                <div class="wallet-actions" id="wallet-actions"></div>
+                            </div>
+                            <div class="wechat-chat-window" id="wechat-chat-window" style="display:none;">
+                                <div class="chat-window-head">
+                                    <button id="chat-back" aria-label="返回">‹</button>
+                                    <span class="chat-unread-total" id="chat-unread-total" style="display:none;"></span>
+                                    <div class="chat-title" id="wechat-chat-title"></div>
+                                </div>
+                                <div class="chat-quick">
+                                    <button data-chatquick="pay">转账</button>
+                                    <button data-chatquick="red">红包</button>
+                                </div>
+                                <div class="chat-window-log" id="wechat-chat-log"></div>
+                                <div class="chat-window-input">
+                                    <input id="wechat-chat-input" placeholder="输入消息…" />
+                                    <button id="wechat-chat-send">发送</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wechat-tabs wechat-bottom-tabs" id="wechat-bottom">
+                            <button data-wtab="chats" class="active">聊天</button>
+                            <button data-wtab="moments">朋友圈</button>
+                            <button data-wtab="wallet">钱包</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 电话页面 -->
+                <div id="call-page" class="app-page" style="display:none;">
+                    <div class="page-header">
+                        <button class="back-home">‹</button>
+                    </div>
+                    <div class="page-body app-scroll">
+                        <div class="call-tabs">
+                            <button data-ctab="history" class="active">通话记录</button>
+                            <button data-ctab="contacts">联系人</button>
+                            <button data-ctab="keypad">拨号</button>
+                        </div>
+                        <div class="call-panel" id="call-history"></div>
+                        <div class="call-panel" id="call-contacts" style="display:none;"></div>
+                        <div class="call-panel" id="call-keypad" style="display:none;">
+                            <div class="dial-display" id="dial-display">输入号码…</div>
+                            <div class="dial-grid" id="dial-grid"></div>
+                            <button class="dial-call" id="dial-call">拨打</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 黑雾页面 -->
+                <div id="darkfog-page" class="app-page" style="display:none;">
+                    <div class="page-header">
+                        <button class="back-home">‹</button>
+                        <span>黑雾</span>
+                    </div>
+                    <div class="page-body">
+                        <p>这里以后可以做黑雾调度、压迫感控制面板。</p>
+                    </div>
+                </div>
+
+                <!-- 守望页面 -->
+                <div id="watch-page" class="app-page" style="display:none;">
+                    <div class="page-header">
+                        <button class="back-home">‹</button>
+                        <span>守望</span>
+                    </div>
+                    <div class="page-body">
+                        <p>这里以后可以做定位、投影、痕迹记录。</p>
+                    </div>
+                </div>
+
+                <!-- 心率页面 -->
+                <div id="heart-page" class="app-page" style="display:none;">
+                    <div class="page-header">
+                        <button class="back-home">‹</button>
+                        <span>心率</span>
+                    </div>
+                    <div class="page-body">
+                        <p>这里以后接你的心率小游戏。</p>
+                    </div>
+                </div>
+
+                <!-- 设置页面 -->
+                <div id="settings-page" class="app-page" style="display:none;">
+                    <div class="page-header">
+                        <button class="back-home">‹</button>
+                    </div>
+                    <div class="page-body app-scroll">
+                        <div class="card-block">壁纸 · 默认</div>
+                        <div class="card-block">AI 模型 · 待接入</div>
+                        <div class="card-block">记忆清单 · 0 条</div>
+                    </div>
+                </div>
+            </div> 
+            <div id="home-bar" ></div>
+        </div>
+    </aside>
+</div>
+
+<!-- 悬浮手机按钮 -->
+<button id="phone-toggle" aria-label="打开手机">
+    <div class="pixel-phone">
+        <div class="pixel-screen"></div>
+    </div>
+</button>
+
+<script src="config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
