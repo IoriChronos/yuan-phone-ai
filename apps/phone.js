@@ -1,3 +1,13 @@
+import { addMemoEntry } from "./memo.js";
+import { getState, updateState } from "../core/state.js";
+import {
+    DEFAULT_ISLAND_LABEL,
+    setIslandLabel,
+    showIslandCallAlert,
+    hideIslandCallAlert,
+    triggerIslandNotify
+} from "../ui/dynamic-island.js";
+
 const callOverlayState = {
     container: null,
     nameEl: null,
@@ -7,8 +17,7 @@ const callOverlayState = {
     timerId: null,
     startTime: 0,
     activeName: "",
-    direction: "",
-    previousLabel: "",
+    direction: ""
 };
 
 let islandCallState = null;
@@ -37,11 +46,17 @@ function updateCallTimerDisplay() {
     callOverlayState.timerEl.textContent = `${mm}:${ss}`;
 }
 
-function startCallSession(name, direction = "incoming") {
+function pushCallHistory(entry) {
+    const calls = (getState("phone.calls") || []).slice();
+    calls.unshift(entry);
+    if (calls.length > 50) calls.length = 50;
+    updateState("phone.calls", calls);
+}
+
+export function startCallSession(name, direction = "incoming") {
     ensureCallOverlayElements();
     hideIslandCallAlert();
     if (!callOverlayState.container) return;
-    callOverlayState.previousLabel = dynamicIslandLabel;
     callOverlayState.activeName = name;
     callOverlayState.direction = direction;
     if (callOverlayState.nameEl) callOverlayState.nameEl.textContent = name;
@@ -56,7 +71,7 @@ function startCallSession(name, direction = "incoming") {
     setIslandLabel(`${name} · 通话中`);
 }
 
-function endCallSession(reason = "结束通话") {
+export function endCallSession(reason = "结束通话") {
     ensureCallOverlayElements();
     if (!callOverlayState.container) return;
     callOverlayState.container.classList.remove("show");
@@ -70,35 +85,10 @@ function endCallSession(reason = "结束通话") {
     }
     callOverlayState.activeName = "";
     callOverlayState.direction = "";
-    callOverlayState.previousLabel = "";
     setIslandLabel(DEFAULT_ISLAND_LABEL);
 }
 
-function showIslandCallAlert(name, { retry = true } = {}) {
-    ensureIslandElements();
-    const callEl = document.getElementById("island-call");
-    const nameEl = document.getElementById("island-call-name");
-    if (nameEl) nameEl.textContent = name;
-    if (dynamicIsland) dynamicIsland.classList.add("call-alert");
-    if (callEl) callEl.setAttribute("aria-hidden", "false");
-    islandCallState = { name, retry };
-    setIslandLabel(name);
-    if (phoneAlertHandler) phoneAlertHandler("来电");
-}
-
-function hideIslandCallAlert() {
-    ensureIslandElements();
-    const callEl = document.getElementById("island-call");
-    if (dynamicIsland) dynamicIsland.classList.remove("call-alert");
-    if (callEl) callEl.setAttribute("aria-hidden", "true");
-    islandCallState = null;
-    if (callRetryTimeout) {
-        clearTimeout(callRetryTimeout);
-        callRetryTimeout = null;
-    }
-}
-
-function handleIslandCallAction(action) {
+export function handleIslandCallAction(action) {
     if (!islandCallState) return;
     const name = islandCallState.name;
     if (action === "accept") {
@@ -123,9 +113,18 @@ function scheduleCallRetry(name, delay = 3000) {
     }, delay);
 }
 
-window.handleIslandCallAction = handleIslandCallAction;
-window.startCallSession = startCallSession;
-window.endCallSession = endCallSession;
-window.showIslandCallAlert = showIslandCallAlert;
-window.hideIslandCallAlert = hideIslandCallAlert;
-window.triggerIncomingCall = window.triggerIncomingCall || function() {};
+export function triggerIncomingCall(name = "未知来电", retry = true) {
+    pushCallHistory({ name, time: "刚刚", note: "来电" });
+    showIslandCallAlert(name);
+    triggerIslandNotify(`来电：${name}`);
+    addMemoEntry(`来电 ← ${name}`);
+    islandCallState = { name, retry };
+    setIslandLabel(name);
+}
+
+export function triggerOutgoingCall(name = "未知线路") {
+    pushCallHistory({ name, time: "刚刚", note: "去电" });
+    addMemoEntry(`呼出 → ${name}`);
+    triggerIslandNotify(`呼出：${name}`);
+    startCallSession(name, "outgoing");
+}

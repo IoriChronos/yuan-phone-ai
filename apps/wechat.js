@@ -1,4 +1,12 @@
-function setupWeChat() {
+import { getState, updateState, subscribeState } from "../core/state.js";
+import { addMemoEntry } from "./memo.js";
+import {
+    triggerIncomingCall as phoneTriggerIncomingCall,
+    triggerOutgoingCall
+} from "./phone.js";
+import { openPhonePage, showPhoneFloatingAlert } from "../ui/phone.js";
+
+export function initWeChatApp() {
     const tabs = document.querySelectorAll(".wechat-tabs button");
     const panels = {
         chats: document.getElementById("wechat-chats"),
@@ -30,7 +38,10 @@ function setupWeChat() {
     const messageBanner = document.getElementById("message-banner");
     const messageBannerTitle = document.getElementById("message-banner-title");
     const messageBannerText = document.getElementById("message-banner-text");
-    let walletBalance = 2180.0;
+    const chats = getState("phone.chats") || [];
+    const moments = getState("phone.moments") || [];
+    const wallet = getState("phone.wallet") || { balance: 0 };
+    let walletBalance = wallet.balance ?? 0;
     let pendingRedEnvelope = null;
     let chatActionsOpen = false;
     let currentChatAction = null;
@@ -42,30 +53,32 @@ function setupWeChat() {
     let messageBannerTimer = null;
     let messageBannerTarget = null;
 
-    const chats = [
-        { id: "yuan", name: "元书", preview: "“靠近一点。”", icon: "◻", time: "刚刚", unread: 1, log: [
-            { from:"in", text:"零钱到账 ¥1314.00", kind:"pay", amount: 1314.00 },
-            { from:"in", text:"“你今天在门口回头三次。”" },
-            { from:"out", text:"我只是觉得有人跟着我。" },
-            { from:"in", text:"“那就是我。”" },
-            { from:"in", text:"红包 ¥6.00", kind:"red", amount: 6.00, redeemed: false },
-        ]},
-        { id: "room", name: "室友", preview: "电闸修好了。", icon: "▣", time: "下午", unread: 0, log: [
-            { from:"in", text:"电闸修好了，你晚点回来吗？" },
-        ]},
-        { id: "shadow", name: "未知 · 留影", preview: "“他在看你。”", icon: "□", time: "刚刚", unread: 0, log: [
-            { from:"in", text:"“他在看你。”" },
-        ]},
-        { id: "sys", name: "系统通告", preview: "和平协议仍有效", icon: "▢", time: "夜里", unread: 0, log: [
-            { from:"in", text:"和平协议仍有效。" },
-        ]},
-    ];
+    function syncUnreadTotals() {
+        const totalUnread = chats.reduce((sum, c) => sum + (c.unread || 0), 0);
+        const unreadByApp = { ...(getState("phone.unreadByApp") || {}) };
+        unreadByApp.wechat = totalUnread;
+        updateState("phone.unreadByApp", unreadByApp);
+        updateState("phone.unreadTotal", totalUnread);
+    }
 
-    const moments = [
-        { who: "你", text: "今天只是想确认一件事：你有没有在看我。", time: "刚刚", likes: 23, likedByUser: false, comments: [] },
-        { who: "未知信号", text: "今晚的城很安静，像在等一场失控。", time: "1 小时前", likes: 9, likedByUser: false, comments: [] },
-        { who: "甜品店老板", text: "提前留了三盒奶油泡芙，希望他别发火。", time: "2 小时前", likes: 12, likedByUser: false, comments: [] },
-    ];
+    function persistChats() {
+        updateState("phone.chats", chats);
+        syncUnreadTotals();
+    }
+
+    function persistMoments() {
+        updateState("phone.moments", moments);
+    }
+
+    function persistWallet() {
+        wallet.balance = walletBalance;
+        updateState("phone.wallet", wallet);
+    }
+
+    function getCallHistory() {
+        return getState("phone.calls") || [];
+    }
+
     const momentTemplates = {
         comment: ["看见你了。", "留意安全。", "别太累。"],
         mention: ["@你 在吗？", "@你 别怕，我在。", "@你 记得回信。"]
@@ -75,9 +88,10 @@ function setupWeChat() {
         if (!moment || !text) return;
         moment.comments = moment.comments || [];
         moment.comments.push({ text, type, time: new Date() });
+        persistMoments();
         addMemoEntry(`朋友圈评论 · ${text}`);
-        if (type === "mention" && phoneAlertHandler) {
-            phoneAlertHandler("@ 提醒");
+        if (type === "mention") {
+            showPhoneFloatingAlert("@ 提醒");
         }
         renderMoments();
     }
@@ -124,15 +138,13 @@ function setupWeChat() {
         if (!chat || !msg) return;
         const preview = formatChatText(msg) || msg.text || "";
         showMessageBanner(chat.name, preview, chat.id);
-        if (phoneAlertHandler) phoneAlertHandler(preview.includes("@") ? "@ 提醒" : "新消息");
+        showPhoneFloatingAlert(preview.includes("@") ? "@ 提醒" : "新消息");
     }
 
     if (messageBanner) {
         messageBanner.addEventListener("click", () => {
             if (messageBannerTarget) {
-                if (typeof window.__openPhonePage === "function") {
-                    window.__openPhonePage("wechat-page");
-                }
+                openPhonePage("wechat-page");
                 switchTab("chats");
                 openChat(messageBannerTarget);
             }
@@ -320,6 +332,7 @@ function setupWeChat() {
         const c = chats.find(x => x.id === id);
         if (!c || !chatWindow || !chatLog) return;
         c.unread = 0;
+        persistChats();
         Object.entries(panels).forEach(([, el]) => {
             if (el) el.style.display = "none";
         });
@@ -359,6 +372,7 @@ function setupWeChat() {
 
     function adjustWallet(delta) {
         walletBalance = Math.max(0, walletBalance + delta);
+        persistWallet();
         updateWalletDisplay();
     }
 
@@ -464,6 +478,7 @@ function setupWeChat() {
         c.time = "刚刚";
         chatInput.value = "";
         setChatActions(false);
+        persistChats();
         openChat(id);
         renderChats();
         setTimeout(() => {
@@ -476,6 +491,7 @@ function setupWeChat() {
                 c.unread = (c.unread || 0) + 1;
                 notifyChatMessage(c, replyMsg);
             }
+            persistChats();
             if (active) {
                 openChat(id);
             } else {
@@ -541,6 +557,7 @@ function setupWeChat() {
                     msg.text = `已收红包 ¥${msg.amount.toFixed(2)}`;
                     adjustWallet(msg.amount);
                 }
+                persistChats();
                 const activeId = chatWindow ? chatWindow.dataset.chat : null;
                 if (activeId && pendingRedEnvelope.chatId === activeId) {
                     openChat(activeId);
@@ -577,11 +594,6 @@ function setupWeChat() {
     const dialDisplay = document.getElementById("dial-display");
     const dialGrid = document.getElementById("dial-grid");
     const dialCall = document.getElementById("dial-call");
-    const callHistory = [
-        { name: "未知来电", time: "刚刚", note: "00:42" },
-        { name: "室友", time: "昨天", note: "01:10" },
-        { name: "未知号码", time: "前天", note: "未接" },
-    ];
     const contacts = [
         { name: "元书", tel: "未知线路" },
         { name: "室友", tel: "131****8888" },
@@ -591,7 +603,7 @@ function setupWeChat() {
         const wrap = callPanels.history;
         if (!wrap) return;
         wrap.innerHTML = "";
-        callHistory.forEach(c => {
+        getCallHistory().forEach(c => {
             const div = document.createElement("div");
             div.className = "call-item";
             div.innerHTML = `
@@ -629,12 +641,10 @@ function setupWeChat() {
         if (dialCall) {
             dialCall.addEventListener("click", () => {
                 const num = (dialDisplay.textContent || "").trim() || "未知号码";
-                callHistory.unshift({ name: num, time: "刚刚", note: "去电" });
+                triggerOutgoingCall(num);
                 renderCallHistory();
                 dialDisplay.textContent = "输入号码…";
-                addMemoEntry(`呼出 → 元书`);
-                triggerIslandNotify("呼出：元书");
-                startCallSession("元书", "outgoing");
+                switchCallTab("history");
             });
         }
     }
@@ -646,19 +656,14 @@ function setupWeChat() {
     }
     callTabs.forEach(btn => btn.addEventListener("click", () => switchCallTab(btn.dataset.ctab)));
     renderCallHistory();
+    subscribeState((path) => {
+        if (path === "phone.calls") {
+            renderCallHistory();
+        }
+    });
     renderContactsList();
     renderDial();
     switchCallTab("history");
-
-    function triggerIncomingCall(name = "未知来电", retry = true) {
-        callHistory.unshift({ name, time: "刚刚", note: "来电" });
-        renderCallHistory();
-        switchCallTab("history");
-        triggerIslandNotify(`来电：${name}`);
-        addMemoEntry(`来电 ← ${name}`);
-        showIslandCallAlert(name, { retry });
-    }
-    window.triggerIncomingCall = triggerIncomingCall;
 
     renderChats();
     renderMoments();
@@ -684,8 +689,8 @@ function setupWeChat() {
                     targetChat.unread = (targetChat.unread || 0) + 3;
                     notifyChatMessage(targetChat, targetChat.log[targetChat.log.length - 1]);
                 }
-                walletBalance += 66;
-                updateWalletDisplay();
+                persistChats();
+                adjustWallet(66);
                 renderChats();
             }
         });
@@ -694,9 +699,8 @@ function setupWeChat() {
     // 守望：触发来电
     document.querySelectorAll('.app-icon[data-target="watch-page"]').forEach(icon => {
         icon.addEventListener('click', () => {
-            triggerIncomingCall("守望 · 来电");
+            phoneTriggerIncomingCall("守望 · 来电");
+            renderCallHistory();
         });
     });
 }
-
-window.setupWeChat = setupWeChat;

@@ -1,8 +1,7 @@
-const memoState = {
-    max: 50,
-    items: [],
-    listEl: null,
-};
+import { getState, updateState } from "../core/state.js";
+
+const MAX_MEMO = 50;
+let memoListEl = null;
 
 function formatMemoTime(date) {
     const d = date instanceof Date ? date : new Date(date);
@@ -11,10 +10,19 @@ function formatMemoTime(date) {
     return `${hh}:${mm}`;
 }
 
-function renderMemoLog() {
-    if (!memoState.listEl) return;
-    memoState.listEl.innerHTML = "";
-    memoState.items.forEach(item => {
+function getMemoList() {
+    return getState("phone.memoLog") || [];
+}
+
+function setMemoList(list) {
+    updateState("phone.memoLog", list);
+}
+
+export function renderMemoLog() {
+    if (!memoListEl) return;
+    const list = getMemoList();
+    memoListEl.innerHTML = "";
+    list.forEach(item => {
         const row = document.createElement("div");
         row.className = "memo-item";
         const span = document.createElement("span");
@@ -23,25 +31,27 @@ function renderMemoLog() {
         text.textContent = item.text;
         row.appendChild(span);
         row.appendChild(text);
-        memoState.listEl.appendChild(row);
+        memoListEl.appendChild(row);
     });
 }
 
-function addMemoEntry(text) {
+export function addMemoEntry(text) {
     if (!text) return;
-    memoState.items.unshift({ text, time: new Date() });
-    if (memoState.items.length > memoState.max) {
-        memoState.items.pop();
-    }
+    const list = getMemoList().slice();
+    list.unshift({ text, time: new Date().toISOString() });
+    if (list.length > MAX_MEMO) list.length = MAX_MEMO;
+    setMemoList(list);
     renderMemoLog();
 }
 
-function clearMemoEntries() {
-    memoState.items = [];
+export function clearMemoEntries() {
+    setMemoList([]);
     renderMemoLog();
 }
 
-window.memoState = memoState;
-window.renderMemoLog = renderMemoLog;
-window.addMemoEntry = addMemoEntry;
-window.clearMemoEntries = clearMemoEntries;
+export function initMemoApp() {
+    memoListEl = document.getElementById("memo-log");
+    const memoClearBtn = document.getElementById("memo-clear");
+    if (memoClearBtn) memoClearBtn.addEventListener("click", clearMemoEntries);
+    renderMemoLog();
+}

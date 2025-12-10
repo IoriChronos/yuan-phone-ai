@@ -1543,6 +1543,23 @@ body.mobile-mode #app {
 #phone-toggle.notify {
     animation: phoneBounce 0.35s ease-in-out 2;
 }
+#phone-toggle.special-alert {
+    animation: toggleSpecialPulse 0.4s ease-in-out 6;
+    box-shadow:
+        0 0 20px rgba(255, 92, 124, 0.55),
+        0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+#phone-toggle.special-alert .pixel-screen {
+    background:
+        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.6), transparent 70%),
+        linear-gradient(145deg, rgba(255, 138, 168, 0.6), rgba(82, 29, 54, 0.9));
+}
+
+#phone-toggle.special-alert #phone-toggle-bubble {
+    background: rgba(255, 92, 124, 0.85);
+    color: #1a0409;
+}
 #phone-toggle-bubble {
     position: absolute;
     top: -6px;
@@ -1567,6 +1584,18 @@ body.mobile-mode #app {
     0% { transform: translateY(0); }
     50% { transform: translateY(-6px); }
     100% { transform: translateY(0); }
+}
+
+@keyframes toggleSpecialPulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.08);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 #red-envelope-overlay {

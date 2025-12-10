@@ -1,7 +1,6 @@
-const CONFIG = {
+export const CONFIG = {
     API_URL: "",
     API_KEY: "",
-    MODEL: ""
+    MODEL: "",
+    prompt: "You are Yuan's phone AI assistant. Respond in short atmospheric sentences."
 };
-
-console.log("Config loaded.");
