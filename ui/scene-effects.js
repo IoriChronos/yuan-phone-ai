@@ -1,6 +1,15 @@
-const ACTION_TRIGGER = /(抓住|攥住|用力拉住|壁咚|推向门板|捏住|按住|扣住|拉扯|锁住|拦住|控制|按紧)/;
-const THOUGHT_TRIGGER = /(心|胸口|发热|颤|渴望|靠近|靠着|贴着|呼吸|热牛奶|牛奶|泡芙|甜品|冷气)/;
-const FOG_WORDS = /(黑雾|深渊|压迫|冰冷|呼吸靠近|霓虹|噪点|雨声|雨|电流|便利店|广播|灯光)/;
+const ACTION_TRIGGER = /(抓住|攥住|用力拉住|壁咚|推向门板|捏住|按住|扣住|拉扯|锁住|拦住|控制|按紧|牵着|扶住|压在)/;
+const THOUGHT_TRIGGER = /(心|胸口|发热|颤|渴望|靠近|靠着|贴着|呼吸|热牛奶|牛奶|泡芙|甜品|冷气|便利店|霓虹|地铁|雨伞|口袋)/;
+const FOG_WORDS = /(黑雾|深渊|压迫|冰冷|呼吸靠近|霓虹|噪点|雨声|雨|电流|便利店|广播|灯光|后室|走廊|监控|空房)/;
+const FX_MATCHERS = [
+    { regex: /(靠近|贴着你|贴近你)/, actions: ["warm", "heartbeat"] },
+    { regex: /(别动|站好|听着)/, actions: ["pressure", "shake"] },
+    { regex: /(凝视|盯着|盯住)/, actions: ["focus"] },
+    { regex: /(黑雾|影子)/, actions: ["fog", "glitch"] },
+    { regex: /(脉搏|心跳)/, actions: ["heartbeat"] },
+    { regex: /(危险|低语)/, actions: ["dim"] },
+    { regex: /(记录你的)/, actions: ["static"] }
+];
 
 let actionCooldown = 0;
 let thoughtCooldown = 0;
@@ -54,6 +63,39 @@ function applyAutomaticFx(handle, meta = {}, role = "system") {
         handle.fog();
         fogCooldown = 4;
     }
+    if (meta.type === "dialogue") {
+        switch (meta.dialogueVariant) {
+            case "command":
+                handle.pressure();
+                handle.shake();
+                break;
+            case "intim":
+                handle.warm();
+                handle.heartbeat();
+                break;
+            case "threat":
+                handle.dim();
+                handle.fog();
+                break;
+            case "whisper-dark":
+                handle.glitch();
+                handle.fog();
+                break;
+            case "low":
+                handle.softGlow();
+                break;
+            default:
+                break;
+        }
+    }
+    if (meta.cleanText) {
+        FX_MATCHERS.forEach(matcher => {
+            matcher.regex.lastIndex = 0;
+            if (matcher.regex.test(meta.cleanText)) {
+                matcher.actions.forEach(action => handle[action]?.());
+            }
+        });
+    }
 }
 
 function triggerInstruction(handle, fxType) {
@@ -71,7 +113,7 @@ function triggerInstruction(handle, fxType) {
 }
 
 function shouldSeedParticles(meta = {}) {
-    return meta.type === "thought";
+    return meta.type === "thought" || meta.type === "dialogue";
 }
 
 function shouldShake(meta = {}) {
@@ -95,7 +137,7 @@ function seedParticles(handle, meta = {}) {
     if (handle.hasParticles) return;
     handle.hasParticles = true;
     const baseCount = Math.max(2, Math.ceil((meta.textLength || 12) / 18));
-    const maxCount = meta.type === "thought" ? 10 : 8;
+    const maxCount = meta.type === "thought" ? 10 : 6;
     const count = Math.min(maxCount, baseCount * 2);
     for (let i = 0; i < count; i++) {
         const dot = document.createElement("span");
@@ -126,6 +168,9 @@ function createHandle(bubble, layer, meta) {
         gold() {
             attachOverlay(layer, "bubble-gold", 2600);
         },
+        warm() {
+            attachOverlay(layer, "bubble-warm", 3200);
+        },
         flash() {
             attachOverlay(layer, "bubble-flash", 300);
         },
@@ -133,6 +178,21 @@ function createHandle(bubble, layer, meta) {
             if (!bubble) return;
             bubble.classList.add("fx-shake");
             setTimeout(() => bubble.classList.remove("fx-shake"), 520);
+        },
+        pressure() {
+            attachOverlay(layer, "bubble-pressure", 1800);
+        },
+        focus() {
+            attachOverlay(layer, "bubble-focus", 2400);
+        },
+        dim() {
+            attachOverlay(layer, "bubble-dim", 2400);
+        },
+        glitch() {
+            attachOverlay(layer, "bubble-glitch", 2000);
+        },
+        static() {
+            attachOverlay(layer, "bubble-static", 2200);
         },
         trigger(type) {
             triggerInstruction(this, type);
@@ -215,12 +275,55 @@ function injectFxStyles() {
         border-radius: inherit;
         animation: bubbleGoldRain 2.6s ease forwards;
     }
+    .bubble-warm {
+        position: absolute;
+        inset: 6%;
+        border-radius: inherit;
+        background: radial-gradient(circle, rgba(255,190,150,0.25), transparent 80%);
+        animation: bubbleWarm 3s ease forwards;
+    }
     .bubble-flash {
         position: absolute;
         inset: 0;
         border-radius: inherit;
         background: radial-gradient(circle, rgba(255,255,255,0.55), transparent 60%);
         animation: bubbleFlash 0.18s ease;
+    }
+    .bubble-pressure {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        border: 1px solid rgba(255,120,140,0.3);
+        animation: bubblePressure 1.1s ease forwards;
+    }
+    .bubble-focus {
+        position: absolute;
+        inset: 10%;
+        border-radius: inherit;
+        border: 1px solid rgba(255,255,255,0.25);
+        animation: bubbleFocus 2.4s ease forwards;
+    }
+    .bubble-dim {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: rgba(0,0,0,0.4);
+        animation: bubbleDim 1.8s ease forwards;
+    }
+    .bubble-glitch {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: repeating-linear-gradient(90deg, rgba(140,110,200,0.3), rgba(140,110,200,0.3) 2px, transparent 2px, transparent 4px);
+        mix-blend-mode: screen;
+        animation: bubbleGlitch 1.6s steps(4) forwards;
+    }
+    .bubble-static {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: radial-gradient(circle, rgba(255,255,255,0.4), transparent 70%);
+        animation: bubbleStatic 2.2s ease forwards;
     }
     .story-bubble.fx-shake {
         animation: fxShakeBubble 0.45s ease;
@@ -249,9 +352,35 @@ function injectFxStyles() {
         0% { opacity: 0.4; transform: translateY(10px); }
         100% { opacity: 0; transform: translateY(-10px); }
     }
+    @keyframes bubbleWarm {
+        0% { opacity: 0.6; transform: scale(0.95); }
+        100% { opacity: 0; transform: scale(1.2); }
+    }
     @keyframes bubbleFlash {
         from { opacity: 0.7; }
         to { opacity: 0; }
+    }
+    @keyframes bubblePressure {
+        0% { opacity: 0.6; transform: scale(0.92); }
+        100% { opacity: 0; transform: scale(1.08); }
+    }
+    @keyframes bubbleFocus {
+        0% { opacity: 0.5; transform: scale(0.95); }
+        100% { opacity: 0; transform: scale(1.2); }
+    }
+    @keyframes bubbleDim {
+        0% { opacity: 0; }
+        40% { opacity: 0.35; }
+        100% { opacity: 0; }
+    }
+    @keyframes bubbleGlitch {
+        0% { opacity: 0.4; transform: translateX(0); }
+        100% { opacity: 0; transform: translateX(6px); }
+    }
+    @keyframes bubbleStatic {
+        0% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+        100% { opacity: 0; }
     }
     @keyframes fxShakeBubble {
         0% { transform: translate3d(0,0,0); }

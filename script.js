@@ -167,6 +167,8 @@ async function requestAIResponse(text, options = {}) {
 function handleSystemInput(raw) {
     const text = raw.trim();
     if (!text) return;
+    addStoryMessage("user", text, { meta: { systemInput: true } });
+    addEventLog({ text: `系统指令：${text}`, type: "system" });
     const colonIndex = text.indexOf(":");
     if (colonIndex > -1) {
         const key = text.slice(0, colonIndex).trim().toLowerCase();

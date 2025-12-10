@@ -1,6 +1,12 @@
 import { addShortMemory, addShortEventMemory, hydrateShortMemory } from "./memory-short.js";
 
 const SYSTEM_VERSION = 2;
+const MARKER_TO_TYPE = {
+    N: "narration",
+    A: "action",
+    T: "thought",
+    S: "system"
+};
 
 const initialContacts = [
     { id: "yuan", name: "元书", tel: "未知线路", icon: "◻" },
@@ -68,73 +74,60 @@ const initialCallHistory = () => ([
     { name: "未知号码", time: "前天", note: "未接" }
 ]);
 
-const defaultStory = [
-    {
-        role: "system",
-        text: "主线从这里开始。你可以先随便说几句，之后我们再把它接到 AI 上。",
-        time: Date.now()
-    },
-    {
-        role: "system",
-        text: "#N 午夜 00:32，便利店外的霓虹像噪点一样闪烁，雨声在天线里折返，整条街只剩你和自己的呼吸。",
-        time: Date.now() + 1
-    },
-    {
-        role: "system",
-        text: "#A 自动门在你身后轻响，他顺势走近，掌心按住你的肩胛，低声勒令：“别走开。”",
-        time: Date.now() + 2
-    },
-    {
-        role: "system",
-        text: "#N 灯光在墙面拖出长线，广播忽然卡顿，像有人在那头慢慢调高音量，提醒你：他正在俯视。",
-        time: Date.now() + 3
-    },
-    {
-        role: "system",
-        text: "#T “他的目光贴得太近，比雨更冷。”",
-        time: Date.now() + 4
-    },
-    {
-        role: "system",
-        text: "#N 你握着的纸杯只剩一口热牛奶，甜味与冷气混在一起，心跳乱成一片。",
-        time: Date.now() + 5
-    },
-    {
-        role: "system",
-        text: "#A **他的指节稳稳扣住**你的下巴，宣告式地说：“提前告诉我你要去哪，别浪费时间。”",
-        time: Date.now() + 6
-    },
-    {
-        role: "system",
-        text: "#N 他把奶油泡芙推到你掌心，糖粉落下来像细小的命令——不许迟到，不许拒绝。",
-        time: Date.now() + 7
-    },
-    {
-        role: "system",
-        text: "#T “要是他真的跟着我回家呢？”",
-        time: Date.now() + 8
-    },
-    {
-        role: "system",
-        text: "#N 黑雾在雨里写下一句短短的答案：别迟到。",
-        time: Date.now() + 9
-    },
-    {
-        role: "system",
-        text: "#S 【通知】守望记录：霓虹信号延迟 0.6 秒。",
-        time: Date.now() + 10
-    },
-    {
+const defaultStoryScript = `
+#N 主线从这里开始。夜班后的便利店只剩冰柜的嗡鸣，你靠在玻璃上听雨和远处的广播共享同一个频率。
+霓虹在积水里弯成失真的线，他的目光顺着玻璃门滑过，像在审视逃生口。
+
+#A 他走近时让冷气先碰到你，指节扫过肩胛，低声命令：“贴着门站好。”
+
+#T “我觉得他又在记录我的心跳。”
+
+#N 你手里的热牛奶被他毫不客气地拿走，糖味与他衣领上的雨声混成静电味的拥抱。
+
+#A **他的掌心扣住**你握杯的手，沿着脉搏慢慢上移：“提前告诉我你的行程。”
+
+#D 靠近一点，别浪费时间。
+
+#N 后室一样的走廊突然亮灯，噪点沿墙蔓延，他像管理员一样站在唯一出口。
+
+#T “如果他一直跟着我，是不是就安全了？”
+
+#D 别动。我在看你。
+
+#S 【通知】守望：摄像头延迟 0.8 秒，系统正在补录。
+`.trim();
+
+const defaultStory = seedDefaultStory();
+
+function seedDefaultStory() {
+    const baseTime = Date.now();
+    const entries = [];
+    const segments = segmentStoryPayload(defaultStoryScript);
+    segments.forEach((segment, index) => {
+        const meta = {};
+        if (segment.storyType) meta.storyType = segment.storyType;
+        meta.segmentIndex = index;
+        meta.segmentTotal = segments.length;
+        const hasMeta = Object.keys(meta).length > 0;
+        entries.push({
+            role: "system",
+            text: segment.text,
+            time: baseTime + index,
+            meta: hasMeta ? meta : null
+        });
+    });
+    entries.push({
         role: "user",
         text: "我站在便利店门口。",
-        time: Date.now() + 11
-    },
-    {
+        time: baseTime + segments.length + 1
+    });
+    entries.push({
         role: "assistant",
-        text: "“别挡着，靠得再近一点。”",
-        time: Date.now() + 12
-    }
-];
+        text: "#D 别挡着，靠得再近一点。",
+        time: baseTime + segments.length + 2
+    });
+    return entries;
+}
 
 function createId(prefix = "id") {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -286,18 +279,18 @@ export function updateWorldState(mutator, path = "world:update") {
 }
 
 export function addStoryMessage(role, text, meta = {}) {
-    if (!text) return;
-    const entry = {
-        role,
-        text,
-        time: meta.time || Date.now(),
-        meta: meta.meta || null,
-        id: meta.id || createId("story")
-    };
-    worldState.story.push(entry);
-    addShortMemory(entry);
-    emit("story:append", { message: entry });
-    return entry;
+    const segments = segmentStoryPayload(text);
+    if (!segments.length) return [];
+    const total = segments.length;
+    const entries = [];
+    segments.forEach((segment, index) => {
+        const entry = createStoryEntry(role, segment.text, meta, segment.storyType, index, total);
+        worldState.story.push(entry);
+        addShortMemory(entry);
+        entries.push(entry);
+        emit("story:append", { message: entry });
+    });
+    return entries;
 }
 
 export function trimStoryAfter(messageId) {
@@ -321,6 +314,91 @@ export function editStoryMessage(messageId, text) {
     hydrateShortMemory(worldState.story);
     emit("story:update", { message: { ...entry } });
     return true;
+}
+
+function segmentStoryPayload(rawText = "") {
+    if (rawText == null) return [];
+    const normalized = String(rawText).replace(/\r\n/g, "\n");
+    const rawBlocks = [];
+    const lines = normalized.split("\n");
+    let buffer = [];
+
+    const flush = () => {
+        if (!buffer.length) return;
+        const joined = buffer.join("\n").trim();
+        if (joined) rawBlocks.push(joined);
+        buffer = [];
+    };
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            flush();
+            return;
+        }
+        const dialogueStart = /^#D\b/.test(trimmed);
+        if (dialogueStart && buffer.length) {
+            flush();
+        }
+        buffer.push(line);
+    });
+    flush();
+
+    const segments = [];
+    let inheritedType = null;
+    rawBlocks.forEach(block => {
+        if (!block) return;
+        let text = block.trim();
+        if (!text) return;
+        const markerMatch = text.match(/^#([A-Z]+)\s*/);
+        let storyType = inheritedType;
+        if (markerMatch) {
+            const marker = markerMatch[1];
+            if (MARKER_TO_TYPE[marker]) {
+                inheritedType = MARKER_TO_TYPE[marker];
+                storyType = inheritedType;
+                text = text.slice(markerMatch[0].length).trim();
+            }
+        }
+        if (!storyType && looksLikeDialogue(text)) {
+            storyType = "dialogue";
+            inheritedType = storyType;
+        }
+        if (!text) return;
+        segments.push({
+            text,
+            storyType
+        });
+    });
+    if (!segments.length && normalized.trim()) {
+        segments.push({ text: normalized.trim(), storyType: null });
+    }
+    return segments;
+}
+
+function looksLikeDialogue(text = "") {
+    if (!text) return false;
+    if (/^“.+”$/.test(text)) return true;
+    return /(说|说道|回答|问道|问：“|他道|她说|我说)/.test(text);
+}
+
+function createStoryEntry(role, text, meta = {}, storyType = null, index = 0, total = 1) {
+    const metaData = { ...(meta.meta || {}) };
+    if (storyType) metaData.storyType = storyType;
+    metaData.segmentIndex = index;
+    metaData.segmentTotal = total;
+    if (!metaData.storyType && metaData.segmentTotal <= 1) {
+        delete metaData.segmentIndex;
+        delete metaData.segmentTotal;
+    }
+    const hasMeta = Object.keys(metaData).length > 0;
+    return {
+        role,
+        text,
+        time: meta.time || Date.now(),
+        meta: hasMeta ? metaData : null,
+        id: createId("story")
+    };
 }
 
 export function addChatMessage(chatId, message = {}) {

@@ -1,4 +1,4 @@
-import { renderStoryBubble, initRendererFx } from "./bubble-renderer.js";
+import { renderStoryBubble, initRendererFx, computeBubbleSpacing } from "./bubble-renderer.js";
 
 export function initAIChatWindow(options = {}) {
     const storyLog = document.getElementById("story-log");
@@ -18,6 +18,10 @@ export function initAIChatWindow(options = {}) {
     const editInput = document.getElementById("story-edit-input");
     const editSaveBtn = document.getElementById("story-edit-save");
     const editCancelBtn = document.getElementById("story-edit-cancel");
+    const storyPanelEl = document.getElementById("story-panel");
+    const storySubtitle = document.querySelector(".story-subtitle");
+    const characterSheet = document.getElementById("character-sheet");
+    const characterCloseBtn = document.getElementById("character-sheet-close");
 
     if (!storyLog || !storyInput || !storySend) {
         throw new Error("AI chat window elements missing");
@@ -36,6 +40,7 @@ export function initAIChatWindow(options = {}) {
         lastBubble: null,
         startDivider: null
     };
+    let lastBubbleType = null;
 
     function limitTwoLines() {
         storyInput.classList.remove("expanded");
@@ -87,6 +92,7 @@ export function initAIChatWindow(options = {}) {
             bubble.dataset.snapshot = entry.snapshotId;
         }
         bubble.__storyEntry = entry;
+        applyBubbleSpacing(bubble, rendered?.meta);
         attachBubbleMenu(bubble, entry);
         if (role === "system") {
             ensureAiGroupStart();
@@ -102,7 +108,7 @@ export function initAIChatWindow(options = {}) {
             continueBtn.remove();
             continueBtn = null;
         }
-        if (role === "system") {
+        if (role === "system" && isLastSystemSegment(entry)) {
             latestSystemId = entry.id || latestSystemId;
             continueBtn = document.createElement("button");
             continueBtn.className = "continue-btn align-left";
@@ -305,6 +311,9 @@ export function initAIChatWindow(options = {}) {
         }
     });
 
+    storySubtitle?.addEventListener("dblclick", () => toggleCharacterPanel());
+    characterCloseBtn?.addEventListener("click", () => toggleCharacterPanel(false));
+
     editCancelBtn?.addEventListener("click", closeEditDialog);
     editSaveBtn?.addEventListener("click", submitEditDialog);
     editSheet?.addEventListener("click", (event) => {
@@ -460,6 +469,15 @@ export function initAIChatWindow(options = {}) {
         }
     }
 
+    function toggleCharacterPanel(forceValue) {
+        if (!characterSheet) return;
+        const nextState = typeof forceValue === "boolean"
+            ? forceValue
+            : !characterSheet.classList.contains("show");
+        characterSheet.classList.toggle("show", nextState);
+        characterSheet.setAttribute("aria-hidden", nextState ? "false" : "true");
+    }
+
     async function submitEditDialog() {
         if (!editingEntry || !editInput) return;
         const content = editInput.value.trim();
@@ -502,6 +520,12 @@ export function initAIChatWindow(options = {}) {
         }
     }
 
+    function isLastSystemSegment(entry = {}) {
+        const meta = entry.meta || {};
+        if (typeof meta.segmentTotal !== "number" || meta.segmentTotal <= 1) return true;
+        return meta.segmentIndex >= meta.segmentTotal - 1;
+    }
+
     initProviderControl();
     initMemorySliderControl();
     limitTwoLines();
@@ -516,6 +540,7 @@ export function initAIChatWindow(options = {}) {
             closeBubbleMenu();
             latestSystemId = null;
             resetAiGroupState();
+            lastBubbleType = null;
             entries.forEach(entry => appendBubble(entry));
             refreshLatestSystem(entries);
             scrollToBottom();
@@ -528,4 +553,16 @@ export function initAIChatWindow(options = {}) {
         endAiReplyGroup,
         updateBubble
     };
+
+    function applyBubbleSpacing(node, meta = {}) {
+        if (!node) return;
+        const type = meta?.type || node.dataset.storyType || null;
+        const variant = meta?.dialogueVariant || node.dataset.dialogueVariant || null;
+        const spacing = computeBubbleSpacing(lastBubbleType, type, variant);
+        if (spacing) {
+            node.style.marginTop = `${spacing.marginTop || 0}px`;
+            node.style.marginBottom = `${spacing.marginBottom || 0}px`;
+        }
+        lastBubbleType = type || lastBubbleType;
+    }
 }
