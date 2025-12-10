@@ -13,6 +13,7 @@ let phoneToggleBubble = null;
 let phoneVisible = false;
 let dockSide = "right";
 let phoneAlertTimer = null;
+let phoneBubbleDelayTimer = null;
 let optionsRef = {};
 
 const APP_LABELS = {
@@ -90,6 +91,10 @@ function clearPhoneAlert() {
     if (phoneToggleBubble) {
         phoneToggleBubble.classList.remove("show");
     }
+    if (phoneBubbleDelayTimer) {
+        clearTimeout(phoneBubbleDelayTimer);
+        phoneBubbleDelayTimer = null;
+    }
     if (phoneAlertTimer) {
         clearTimeout(phoneAlertTimer);
         phoneAlertTimer = null;
@@ -97,13 +102,32 @@ function clearPhoneAlert() {
 }
 
 function showPhoneAlert(message = "新消息", { special = false } = {}) {
-    if (!toggleBtn || phoneVisible) return;
+    if (!toggleBtn) return;
+    const shouldFloat = !phoneVisible;
+    if (!shouldFloat) {
+        toggleBtn.classList.remove("notify");
+        toggleBtn.classList.remove("special-alert");
+        if (phoneToggleBubble) {
+            phoneToggleBubble.classList.remove("show");
+        }
+        return;
+    }
     toggleBtn.classList.add("notify");
-    if (special) toggleBtn.classList.add("special-alert");
+    if (special) {
+        toggleBtn.classList.add("special-alert");
+    } else {
+        toggleBtn.classList.remove("special-alert");
+    }
     if (phoneToggleBubble) {
         phoneToggleBubble.textContent = message;
-        phoneToggleBubble.classList.add("show");
+        phoneToggleBubble.classList.remove("show");
     }
+    if (phoneBubbleDelayTimer) clearTimeout(phoneBubbleDelayTimer);
+    phoneBubbleDelayTimer = setTimeout(() => {
+        if (!phoneVisible) {
+            phoneToggleBubble?.classList.add("show");
+        }
+    }, 720);
     if (phoneAlertTimer) clearTimeout(phoneAlertTimer);
     phoneAlertTimer = setTimeout(() => {
         clearPhoneAlert();

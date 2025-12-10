@@ -7,6 +7,7 @@ import {
 import { openPhonePage, showPhoneFloatingAlert } from "../ui/phone.js";
 
 let weChatRuntime = null;
+const PLAYER_ID = "player";
 
 export function initWeChatApp() {
     const tabs = document.querySelectorAll(".wechat-tabs button");
@@ -24,6 +25,8 @@ export function initWeChatApp() {
     const wechatTop = document.getElementById("wechat-top");
     const wechatBottom = document.getElementById("wechat-bottom");
     const momentsFeed = document.getElementById("wechat-moments-feed");
+    const momentComposerInput = document.getElementById("moment-composer-input");
+    const momentComposerSend = document.getElementById("moment-composer-send");
     const chatActionsToggle = document.getElementById("chat-actions-toggle");
     const chatActionsPanel = document.getElementById("chat-actions-panel");
     const chatActionsButtons = document.getElementById("chat-actions-buttons");
@@ -81,31 +84,81 @@ export function initWeChatApp() {
         return getState("phone.calls") || [];
     }
 
+    function getContactsList() {
+        return getState("contacts") || [];
+    }
+
     function getMentionContacts() {
-        return (getState("contacts") || []).map(c => ({
+        return getContactsList().map(c => ({
             id: c.id,
             name: c.name || c.id
         }));
     }
 
-    async function addMomentComment(moment, text, type = "comment") {
+    function resolveContactIdByName(name = "") {
+        if (!name) return null;
+        const contact = getContactsList().find(c => c.name === name);
+        return contact ? contact.id : null;
+    }
+
+    function extractMentionedContactIds(text = "") {
+        if (!text || !text.includes("@")) return [];
+        const contacts = getContactsList();
+        const matched = new Set();
+        contacts.forEach(contact => {
+            const contactName = contact.name || "";
+            if (!contactName) return;
+            if (text.includes(`@${contactName}`)) {
+                matched.add(contact.id);
+            }
+        });
+        const normalized = text.toLowerCase();
+        if (/@你|@我/.test(text) || normalized.includes("@me") || normalized.includes("@self")) {
+            matched.add(PLAYER_ID);
+        }
+        return Array.from(matched);
+    }
+
+    async function addMomentComment(moment, text, options = {}) {
         if (!moment || !text) return;
+        const {
+            type,
+            authorId = PLAYER_ID,
+            mentionedContactIds,
+            triggerEcho = true
+        } = typeof options === "object" ? options : {};
         moment.comments = moment.comments || [];
-        moment.comments.push({ text, type, time: new Date() });
+        const mentions = (mentionedContactIds && mentionedContactIds.length)
+            ? mentionedContactIds
+            : extractMentionedContactIds(text);
+        const entryType = type || (mentions.length ? "mention" : "comment");
+        const entry = {
+            text,
+            type: entryType,
+            time: new Date(),
+            authorId,
+            mentions
+        };
+        moment.comments.push(entry);
         persistMoments();
-        if (type === "mention") {
+        const playerMentioned = mentions.includes(PLAYER_ID);
+        if (playerMentioned && authorId !== PLAYER_ID) {
             showPhoneFloatingAlert("@ 提醒");
         }
         renderMoments();
-        try {
-            const aiEcho = await askAI(`朋友圈互动：${moment.who} 发布了「${moment.text}」，请跟进一句回复。`);
-            if (aiEcho) {
-                moment.comments.push({ text: aiEcho, type: "ai", time: new Date() });
-                persistMoments();
-                renderMoments();
+        if (triggerEcho) {
+            try {
+                const aiEcho = await askAI(`朋友圈互动：${moment.who} 发布了「${moment.text}」，请跟进一句回复。`);
+                if (aiEcho) {
+                    await addMomentComment(moment, aiEcho, {
+                        type: "ai",
+                        authorId: resolveContactIdByName(moment.who) || "npc",
+                        triggerEcho: false
+                    });
+                }
+            } catch (err) {
+                console.error("AI 评论失败", err);
             }
-        } catch (err) {
-            console.error("AI 评论失败", err);
         }
     }
 
@@ -311,7 +364,10 @@ export function initWeChatApp() {
                 commentInput.value = "";
                 mentionMenu.classList.remove("open");
                 mentionMenu.setAttribute("aria-hidden", "true");
-                addMomentComment(m, text, type).catch(err => console.error(err));
+                addMomentComment(m, text, {
+                    type,
+                    authorId: PLAYER_ID
+                }).catch(err => console.error(err));
             });
             if (m.comments && m.comments.length) {
                 const commentsBlock = document.createElement("div");
@@ -326,6 +382,22 @@ export function initWeChatApp() {
             }
             wrap.appendChild(div);
         });
+    }
+
+    function publishMoment(text) {
+        if (!text) return;
+        const entry = {
+            id: `moment-${Date.now()}`,
+            who: "你",
+            text,
+            time: "刚刚",
+            likes: 0,
+            likedByUser: false,
+            comments: []
+        };
+        moments.unshift(entry);
+        persistMoments();
+        renderMoments();
     }
 
     function renderWallet() {
@@ -720,13 +792,26 @@ export function initWeChatApp() {
     renderDial();
     switchCallTab("history");
 
+    if (momentComposerSend && momentComposerInput) {
+        momentComposerSend.addEventListener("click", () => {
+            const text = momentComposerInput.value.trim();
+            if (!text) return;
+            publishMoment(text);
+            momentComposerInput.value = "";
+        });
+    }
+
     weChatRuntime = {
         chats,
         moments,
         handleIncomingMessage,
         renderChats,
         renderMoments,
-        persistMoments
+        persistMoments,
+        addMomentComment,
+        publishMoment,
+        resolveContactIdByName,
+        extractMentionedContactIds
     };
 
     renderChats();
@@ -789,11 +874,18 @@ export async function triggerMomentsNotification() {
     if (!target) return;
     try {
         const aiComment = await askAI(`朋友圈中「${target.text}」，请生成一句神秘评论。`);
-        target.comments = target.comments || [];
-        target.comments.push({ text: aiComment || "……", type: "ai", time: new Date() });
-        weChatRuntime.persistMoments();
-        weChatRuntime.renderMoments();
-        showPhoneFloatingAlert("朋友圈提醒");
+        const text = aiComment || "……";
+        const mentionIds = weChatRuntime.extractMentionedContactIds?.(text) || [];
+        const mentionPlayer = mentionIds.includes(PLAYER_ID);
+        await weChatRuntime.addMomentComment(target, text, {
+            type: text.includes("@") ? "mention" : "ai",
+            authorId: weChatRuntime.resolveContactIdByName?.(target.who) || "npc",
+            mentionedContactIds: mentionIds,
+            triggerEcho: false
+        });
+        if (!mentionPlayer) {
+            showPhoneFloatingAlert("朋友圈提醒");
+        }
     } catch (err) {
         console.error("朋友圈触发失败", err);
     }
