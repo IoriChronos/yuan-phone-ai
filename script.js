@@ -1,4 +1,4 @@
-import { getState, updateState } from "./core/state.js";
+import { updateState } from "./core/state.js";
 import { syncStateWithStorage } from "./core/storage.js";
 import { initAIChatWindow } from "./ui/ai-chat-window.js";
 import {
@@ -10,9 +10,12 @@ import { initMemoApp, addMemoEntry } from "./apps/memo.js";
 import { initWeChatApp, triggerWeChatNotification, triggerMomentsNotification } from "./apps/wechat.js";
 import { handleIslandCallAction, triggerIncomingCall } from "./apps/phone.js";
 import { setTriggerHandlers, checkTriggers } from "./core/triggers.js";
-import { askAI } from "./core/ai.js";
+import { generateNarrativeReply } from "./core/ai.js";
+import { applyAction } from "./core/action-router.js";
+import { getWorldState, addStoryMessage, subscribeWorldState } from "./data/world-state.js";
 
 let storyUI = null;
+let storyBound = false;
 
 document.addEventListener("DOMContentLoaded", () => {
     syncStateWithStorage();
@@ -40,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
         onSubmit: handleStorySubmit
     });
     hydrateStoryLog();
+    bindStoryStream();
 
     window.addEventListener("message", (event) => {
         if (typeof event.data === "string") {
@@ -52,25 +56,36 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function hydrateStoryLog() {
-    const history = getState("story") || [];
+    const history = getWorldState().story || [];
     history.forEach(entry => {
         storyUI.appendBubble(entry.role, entry.text);
     });
 }
 
-function appendStoryEntry(role, text) {
-    const history = getState("story") || [];
-    const next = history.slice();
-    next.push({ role, text });
-    updateState("story", next);
-    storyUI.appendBubble(role, text);
+function bindStoryStream() {
+    if (storyBound) return;
+    subscribeWorldState((path, detail) => {
+        if (path === "story:append" && detail?.message) {
+            storyUI?.appendBubble(detail.message.role, detail.message.text);
+        }
+    });
+    storyBound = true;
 }
 
 async function handleStorySubmit(text) {
-    appendStoryEntry("user", text);
+    addStoryMessage("user", text);
     await checkTriggers(text);
-    const reply = await askAI(`剧情输入：${text}`);
-    appendStoryEntry("system", reply || "(AI 无回复)");
+    try {
+        const action = await generateNarrativeReply(text);
+        if (action) {
+            applyAction(action);
+        } else {
+            addStoryMessage("system", "(AI 无回复)");
+        }
+    } catch (err) {
+        console.error("AI 剧情回复失败", err);
+        addStoryMessage("system", "(AI 无回复)");
+    }
 }
 
 function initClock() {

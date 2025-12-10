@@ -1,92 +1,159 @@
-import { GameState, subscribeState } from "./state.js";
+import { getWorldState } from "../data/world-state.js";
+import { getLongMemory, loadLongMemory } from "../data/memory-long.js";
+import { initState, subscribeState } from "./state.js";
 
-const STORAGE_KEY = "yuan-phone:gameState";
-let saveTimer = null;
-let synced = false;
+const STORAGE_VERSION = 2;
+const STORAGE_KEYS = {
+    world: "yuan-phone:world",
+    longMemory: "yuan-phone:memory-long",
+    backupPrefix: "yuan-phone:backup:"
+};
+const MAX_BACKUPS = 3;
 
-function storageAvailable() {
-    try {
-        const key = "__yuan_phone_test__";
-        window.localStorage.setItem(key, "1");
-        window.localStorage.removeItem(key);
-        return true;
-    } catch (err) {
-        console.warn("LocalStorage unavailable:", err);
-        return false;
-    }
-}
-
-function scheduleSave() {
-    if (saveTimer) return;
-    saveTimer = setTimeout(() => {
-        saveTimer = null;
-        saveState();
-    }, 200);
-}
-
-export function saveState() {
-    if (!storageAvailable()) return;
-    try {
-        const snapshot = JSON.stringify(GameState, (key, value) => {
-            if (key === "phone") return undefined;
-            return value;
-        });
-        window.localStorage.setItem(STORAGE_KEY, snapshot);
-    } catch (err) {
-        console.warn("Failed to persist GameState", err);
-    }
-}
-
-export function loadState() {
-    if (!storageAvailable()) return GameState;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return GameState;
-    try {
-        const data = JSON.parse(raw);
-        Object.entries(data).forEach(([key, value]) => {
-            if (key === "asContext" || key === "phone") return;
-            GameState[key] = value;
-        });
-        normalizeChats(GameState.chats);
-        const chats = GameState.chats || [];
-        const wechatUnread = chats.reduce((sum, chat) => sum + (chat.unread || 0), 0);
-        GameState.unread.byApp.wechat = wechatUnread;
-        GameState.unread.total = wechatUnread + (GameState.unread.byApp.phone || 0);
-    } catch (err) {
-        console.warn("Failed to parse GameState", err);
-    }
-    return GameState;
+export function loadInitialData() {
+    return {
+        worldState: loadWorldStateSnapshot(),
+        memoryLong: loadLongMemorySnapshot()
+    };
 }
 
 export function syncStateWithStorage() {
-    if (synced) return;
-    synced = true;
-    loadState();
-    subscribeState(() => scheduleSave());
-}
-
-function normalizeChats(list = []) {
-    list.forEach(chat => {
-        if (chat && !chat.log && Array.isArray(chat.messages)) {
-            chat.log = chat.messages;
-            delete chat.messages;
-        }
-        if (chat && chat.title && !chat.name) {
-            chat.name = chat.title;
-        }
-        if (chat && !chat.preview) {
-            chat.preview = computePreview(chat.log);
-        }
+    const { worldState, memoryLong } = loadInitialData();
+    initState(worldState);
+    loadLongMemory(memoryLong);
+    subscribeState(() => saveWorldStateSnapshot());
+    window.addEventListener("beforeunload", () => {
+        saveWorldStateSnapshot();
+        saveLongMemorySnapshot();
     });
 }
 
-function computePreview(log = []) {
-    if (!log.length) return "";
-    const last = log[log.length - 1];
-    if (last.text) return last.text;
-    if (last.kind === "pay") return `转账 ¥${(last.amount || 0).toFixed(2)}`;
-    if (last.kind === "red") {
-        return `${last.redeemed ? "已收红包" : "红包"} ¥${(last.amount || 0).toFixed(2)}`;
+export function saveWorldStateSnapshot(state = getWorldState()) {
+    if (!storageAvailable()) return;
+    const payload = {
+        version: STORAGE_VERSION,
+        data: state
+    };
+    try {
+        window.localStorage.setItem(STORAGE_KEYS.world, JSON.stringify(payload));
+        writeBackup(payload);
+    } catch (err) {
+        console.warn("Failed to save world state", err);
     }
-    return "";
+}
+
+export function saveLongMemorySnapshot(data = getLongMemory()) {
+    if (!storageAvailable()) return;
+    try {
+        window.localStorage.setItem(STORAGE_KEYS.longMemory, JSON.stringify({
+            version: STORAGE_VERSION,
+            data
+        }));
+    } catch (err) {
+        console.warn("Failed to save long memory", err);
+    }
+}
+
+function loadWorldStateSnapshot() {
+    if (!storageAvailable()) return null;
+    const raw = window.localStorage.getItem(STORAGE_KEYS.world);
+    if (!raw) return null;
+    try {
+        const payload = JSON.parse(raw);
+        return applyMigrations(payload);
+    } catch (err) {
+        console.warn("Failed to parse world state snapshot", err);
+        return null;
+    }
+}
+
+function loadLongMemorySnapshot() {
+    if (!storageAvailable()) return [];
+    const raw = window.localStorage.getItem(STORAGE_KEYS.longMemory);
+    if (!raw) return [];
+    try {
+        const payload = JSON.parse(raw);
+        return payload.data || payload || [];
+    } catch (err) {
+        console.warn("Failed to parse long memory snapshot", err);
+        return [];
+    }
+}
+
+function applyMigrations(payload) {
+    if (!payload) return null;
+    let version = payload.version || 1;
+    let data = payload.data || payload;
+    if (!data.contacts && data.phone) {
+        data = convertLegacyState(data);
+    }
+    if (version < STORAGE_VERSION) {
+        version = STORAGE_VERSION;
+    }
+    return data;
+}
+
+function convertLegacyState(legacy) {
+    const story = legacy.story || [];
+    const phone = legacy.phone || {};
+    const chats = (phone.chats || []).map(chat => ({
+        id: chat.id,
+        name: chat.name,
+        icon: chat.icon,
+        time: chat.time,
+        unread: chat.unread,
+        log: chat.log || chat.messages || [],
+        preview: chat.preview
+    }));
+    return {
+        story,
+        contacts: legacy.contacts || [],
+        chats,
+        chatOrder: chats.map(c => c.id),
+        moments: phone.moments || [],
+        callHistory: phone.calls || [],
+        memoEntries: phone.memoLog || [],
+        eventsLog: legacy.eventsLog || [],
+        unread: {
+            total: legacy.phone?.unreadTotal || 0,
+            byApp: legacy.phone?.unreadByApp || { wechat: 0, phone: 0 }
+        },
+        wallet: phone.wallet || { balance: 0, events: [] },
+        blackFog: legacy.blackFog || { nodes: [] }
+    };
+}
+
+function writeBackup(payload) {
+    try {
+        const key = `${STORAGE_KEYS.backupPrefix}${Date.now()}`;
+        window.localStorage.setItem(key, JSON.stringify(payload));
+        pruneBackups();
+    } catch (err) {
+        console.warn("Failed to write backup", err);
+    }
+}
+
+function pruneBackups() {
+    const keys = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && key.startsWith(STORAGE_KEYS.backupPrefix)) {
+            keys.push(key);
+        }
+    }
+    keys.sort((a, b) => (a > b ? -1 : 1));
+    keys.slice(MAX_BACKUPS).forEach(key => {
+        window.localStorage.removeItem(key);
+    });
+}
+
+function storageAvailable() {
+    try {
+        const testKey = "__world_state_test__";
+        window.localStorage.setItem(testKey, "1");
+        window.localStorage.removeItem(testKey);
+        return true;
+    } catch {
+        return false;
+    }
 }

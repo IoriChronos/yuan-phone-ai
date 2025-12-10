@@ -1,6 +1,5 @@
-import { getState, updateState } from "../core/state.js";
+import { getWorldState, addMemoEntry as recordMemoEntry, clearMemoEntries as resetMemoEntries, subscribeWorldState } from "../data/world-state.js";
 
-const MAX_MEMO = 50;
 let memoListEl = null;
 
 function formatMemoTime(date) {
@@ -11,11 +10,8 @@ function formatMemoTime(date) {
 }
 
 function getMemoList() {
-    return getState("memoLog") || [];
-}
-
-function setMemoList(list) {
-    updateState("memoLog", list);
+    const state = getWorldState();
+    return state.memoEntries || [];
 }
 
 export function renderMemoLog() {
@@ -36,22 +32,21 @@ export function renderMemoLog() {
 }
 
 export function addMemoEntry(text) {
-    if (!text) return;
-    const list = getMemoList().slice();
-    list.unshift({ text, time: new Date().toISOString() });
-    if (list.length > MAX_MEMO) list.length = MAX_MEMO;
-    setMemoList(list);
-    renderMemoLog();
+    recordMemoEntry(text);
 }
 
 export function clearMemoEntries() {
-    setMemoList([]);
-    renderMemoLog();
+    resetMemoEntries();
 }
 
 export function initMemoApp() {
     memoListEl = document.getElementById("memo-log");
     const memoClearBtn = document.getElementById("memo-clear");
-    if (memoClearBtn) memoClearBtn.addEventListener("click", clearMemoEntries);
+    if (memoClearBtn) memoClearBtn.addEventListener("click", () => {
+        clearMemoEntries();
+    });
+    subscribeWorldState((path) => {
+        if (path.startsWith("memo")) renderMemoLog();
+    });
     renderMemoLog();
 }
