@@ -1,5 +1,7 @@
 import { getState, updateState } from "../core/state.js";
 import { askAI } from "../core/ai.js";
+import { addShortEventMemory } from "../data/memory-short.js";
+import { addEventLog } from "../data/events-log.js";
 import {
     DEFAULT_ISLAND_LABEL,
     setIslandLabel,
@@ -27,6 +29,27 @@ const callOverlayState = {
 
 let islandCallState = null;
 let callRetryTimeout = null;
+
+function recordCallEvent(text, meta = {}) {
+    if (!text) return;
+    const entry = {
+        type: "call",
+        app: "phone",
+        text,
+        meta: { ...meta },
+        time: Date.now()
+    };
+    try {
+        addShortEventMemory(entry);
+    } catch (err) {
+        console.warn("记录通话短期记忆失败", err);
+    }
+    try {
+        addEventLog({ text, type: "call", time: entry.time });
+    } catch (err) {
+        console.warn("记录通话事件失败", err);
+    }
+}
 
 function ensureCallOverlayElements() {
     if (!callOverlayState.container) {
@@ -95,6 +118,7 @@ export function startCallSession(name, direction = "incoming") {
     callOverlayState.timerId = setInterval(updateCallTimerDisplay, 1000);
     setIslandLabel(`${name} · 通话中`);
     startTranscriptLoop(name);
+    recordCallEvent(`${name} ${direction === "incoming" ? "接通来电" : "开始通话"}`, { direction });
 }
 
 export function endCallSession(reason = "结束通话") {
@@ -107,6 +131,8 @@ export function endCallSession(reason = "结束通话") {
     }
     stopTranscriptLoop();
     callOverlayState.startTime = 0;
+    const finishedName = callOverlayState.activeName;
+    const finishedDirection = callOverlayState.direction;
     if (callOverlayState.historyIndex != null) {
         updateCallHistory(callOverlayState.historyIndex, {
             note: reason,
@@ -119,6 +145,9 @@ export function endCallSession(reason = "结束通话") {
     callOverlayState.transcriptLog = [];
     setIslandLabel(DEFAULT_ISLAND_LABEL);
     collapseIslandAfterCall();
+    recordCallEvent(`${finishedName || "未知来电"} 通话结束：${reason}`, {
+        direction: finishedDirection || "unknown"
+    });
 }
 
 export function handleIslandCallAction(action) {
@@ -152,12 +181,14 @@ export function triggerIncomingCall(name = "未知来电", retry = true) {
     triggerIslandNotify(`来电：${name}`);
     islandCallState = { name, retry, historyIndex: index };
     setIslandLabel(name);
+    recordCallEvent(`来电提醒：${name}`, { direction: "incoming" });
 }
 
 export function triggerOutgoingCall(name = "未知线路") {
     callOverlayState.historyIndex = pushCallHistory({ name, time: "刚刚", note: "去电" });
     triggerIslandNotify(`呼出：${name}`);
     startCallSession(name, "outgoing");
+    recordCallEvent(`呼出：${name}`, { direction: "outgoing" });
 }
 function appendTranscriptLine(text, role = "npc") {
     if (!callOverlayState.transcriptEl) return;

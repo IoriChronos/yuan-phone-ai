@@ -256,6 +256,29 @@ body.mobile-mode #app {
     cursor: pointer;
 }
 
+.memory-limit-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.03);
+    font-size: 12px;
+    color: rgba(255,255,255,0.75);
+}
+
+.memory-limit-control input[type="range"] {
+    flex: 1;
+    accent-color: rgba(255,180,200,0.9);
+}
+
+.memory-limit-control .memory-value {
+    min-width: 20px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 .icon-restart,
 .icon-system {
     flex-shrink: 0;
@@ -368,9 +391,10 @@ body.mobile-mode #app {
     backdrop-filter: blur(8px);
     font-size: 12px;
     cursor: pointer;
-    margin-left: auto;
-    margin-right: 8px;
+    margin-left: 12px;
+    margin-right: auto;
     margin-top: 6px;
+    align-self: flex-start;
     animation: pulse 2.4s infinite ease-in-out;
 }
 
@@ -378,6 +402,51 @@ body.mobile-mode #app {
     0% { opacity: .7; }
     50% { opacity: 1; }
     100% { opacity: .7; }
+}
+
+#story-context-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 40;
+}
+
+#story-context-menu.show {
+    pointer-events: auto;
+}
+
+#story-context-menu .context-panel {
+    position: absolute;
+    min-width: 140px;
+    background: rgba(22,10,20,0.92);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#story-context-menu button {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.85);
+    font-size: 13px;
+    padding: 8px 12px;
+    text-align: left;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+#story-context-menu button:last-child {
+    border-bottom: none;
+}
+
+#story-context-menu button:hover {
+    background: rgba(255,255,255,0.07);
 }
 #story-input {
     scrollbar-width: none;

@@ -1,4 +1,4 @@
-import { addShortMemory, hydrateShortMemory } from "./memory-short.js";
+import { addShortMemory, addShortEventMemory, hydrateShortMemory } from "./memory-short.js";
 
 const SYSTEM_VERSION = 2;
 
@@ -238,6 +238,12 @@ export function addChatMessage(chatId, message = {}) {
     chat.log.push(entry);
     chat.preview = computeChatPreview(chat.log);
     chat.time = "刚刚";
+    addShortEventMemory({
+        type: entry.kind || "chat",
+        app: "wechat",
+        text: entry.text || chat.preview || "",
+        meta: { chatId, direction: entry.from }
+    });
     if (entry.from === "in") {
         chat.unread = (chat.unread || 0) + 1;
         refreshUnread();
@@ -266,6 +272,12 @@ export function addMomentComment(momentId, comment) {
     };
     moment.comments = moment.comments || [];
     moment.comments.push(entry);
+    addShortEventMemory({
+        type: entry.type || "comment",
+        app: "moments",
+        text: `${entry.from || "访客"}: ${entry.text}`,
+        meta: { momentId }
+    });
     emit("moments:comment", { momentId, comment: entry });
 }
 
@@ -301,6 +313,12 @@ export function addCallLog(entry) {
     };
     worldState.callHistory.unshift(record);
     worldState.callHistory = worldState.callHistory.slice(0, 50);
+    addShortEventMemory({
+        type: "call",
+        app: "phone",
+        text: `${record.name} · ${record.note || "通话"}`,
+        meta: { direction: entry.direction || record.note }
+    });
     emit("calls:add", { record });
     return 0;
 }

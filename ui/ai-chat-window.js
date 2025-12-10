@@ -9,6 +9,8 @@ export function initAIChatWindow(options = {}) {
     const restartBtn = document.getElementById("story-tool-restart");
     const restartSheet = document.getElementById("restart-sheet");
     const restartButtons = restartSheet?.querySelectorAll("[data-restart]");
+    const memorySlider = document.getElementById("long-memory-slider");
+    const memoryValue = document.getElementById("long-memory-value");
 
     if (!storyLog || !storyInput || !storySend) {
         throw new Error("AI chat window elements missing");
@@ -16,6 +18,7 @@ export function initAIChatWindow(options = {}) {
 
     let systemMode = false;
     let continueBtn = null;
+    let contextMenu = null;
 
     function limitTwoLines() {
         storyInput.classList.remove("expanded");
@@ -45,11 +48,18 @@ export function initAIChatWindow(options = {}) {
         collapseBtn?.classList.remove("hidden");
     }
 
-    function appendBubble(role, text) {
-        if (!storyLog) return;
+    function appendBubble(entry) {
+        if (!storyLog || !entry) return null;
+        const role = entry.role || "system";
         const bubble = document.createElement("div");
         bubble.className = `story-bubble ${role}`;
-        bubble.textContent = text;
+        bubble.textContent = entry.text || "";
+        bubble.dataset.role = role;
+        if (entry.snapshotId) {
+            bubble.dataset.snapshot = entry.snapshotId;
+        }
+        bubble.__storyEntry = entry;
+        attachBubbleMenu(bubble, entry);
         storyLog.appendChild(bubble);
         storyLog.scrollTop = storyLog.scrollHeight;
         if (continueBtn) {
@@ -69,6 +79,92 @@ export function initAIChatWindow(options = {}) {
             bubble.insertAdjacentElement("afterend", continueBtn);
         }
         return bubble;
+    }
+
+    function attachBubbleMenu(bubble, entry) {
+        bubble.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            openBubbleMenu(event, entry);
+        });
+    }
+
+    function openBubbleMenu(event, entry) {
+        const actions = resolveBubbleActions(entry);
+        if (!actions.length) return;
+        if (!contextMenu) {
+            contextMenu = document.createElement("div");
+            contextMenu.id = "story-context-menu";
+            document.body.appendChild(contextMenu);
+        }
+        contextMenu.innerHTML = "";
+        const panel = document.createElement("div");
+        panel.className = "context-panel";
+        actions.forEach(action => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = action.label;
+            btn.addEventListener("click", () => {
+                options.onBubbleAction?.(action.id, entry);
+                closeBubbleMenu();
+            });
+            panel.appendChild(btn);
+        });
+        contextMenu.appendChild(panel);
+        const rect = panel.getBoundingClientRect();
+        const maxX = Math.max(12, window.innerWidth - rect.width - 12);
+        const maxY = Math.max(12, window.innerHeight - rect.height - 12);
+        const offsetX = Math.min(Math.max(12, event.clientX), maxX);
+        const offsetY = Math.min(Math.max(12, event.clientY), maxY);
+        panel.style.left = `${offsetX}px`;
+        panel.style.top = `${offsetY}px`;
+        contextMenu.classList.add("show");
+        const closeHandler = (e) => {
+            if (contextMenu && !panel.contains(e.target)) {
+                closeBubbleMenu();
+            }
+        };
+        contextMenu._closeHandler = closeHandler;
+        document.addEventListener("mousedown", closeHandler, { once: true });
+        contextMenu.addEventListener("mousedown", (evt) => {
+            if (!panel.contains(evt.target)) {
+                closeBubbleMenu();
+            }
+        }, { once: true });
+    }
+
+    function closeBubbleMenu() {
+        if (!contextMenu) return;
+        contextMenu.classList.remove("show");
+        contextMenu.innerHTML = "";
+        if (contextMenu._closeHandler) {
+            document.removeEventListener("mousedown", contextMenu._closeHandler);
+            contextMenu._closeHandler = null;
+        }
+    }
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeBubbleMenu();
+        }
+    });
+
+    function resolveBubbleActions(entry = {}) {
+        const items = [];
+        if (entry.snapshotId) {
+            items.push({ id: "rewind", label: "撤回到此处" });
+        }
+        if (entry.role === "system") {
+            items.push({ id: "retry", label: "重说这一句" });
+        }
+        return items;
+    }
+
+    function setBubbleSnapshot(node, snapshotId) {
+        if (!node || !snapshotId) return;
+        node.dataset.snapshot = snapshotId;
+        if (node.__storyEntry) {
+            node.__storyEntry.snapshotId = snapshotId;
+        }
     }
 
     function handleSubmit() {
@@ -163,6 +259,19 @@ export function initAIChatWindow(options = {}) {
         }
     });
 
+    function initMemorySliderControl() {
+        if (!memorySlider || !memoryValue) return;
+        const startValue = Number(options.longMemoryLimit) || Number(memorySlider.value) || 3;
+        memorySlider.value = startValue;
+        memoryValue.textContent = startValue;
+        memorySlider.addEventListener("input", () => {
+            const current = Number(memorySlider.value);
+            memoryValue.textContent = current;
+            options.onLongMemoryChange?.(current);
+        });
+    }
+
+    initMemorySliderControl();
     limitTwoLines();
 
     return {
@@ -172,8 +281,10 @@ export function initAIChatWindow(options = {}) {
         replaceHistory(entries = []) {
             storyLog.innerHTML = "";
             continueBtn = null;
-            entries.forEach(entry => appendBubble(entry.role, entry.text));
+            closeBubbleMenu();
+            entries.forEach(entry => appendBubble(entry));
         },
-        exitSystemMode: () => toggleSystemMode(false)
+        exitSystemMode: () => toggleSystemMode(false),
+        setBubbleSnapshot: setBubbleSnapshot
     };
 }

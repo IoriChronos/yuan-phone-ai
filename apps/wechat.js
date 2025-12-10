@@ -7,6 +7,8 @@ import {
 import { openPhonePage, showPhoneFloatingAlert } from "../ui/phone.js";
 import { triggerIslandNotify } from "../ui/dynamic-island.js";
 import { incrementMomentsUnread, clearMomentsUnread } from "../data/world-state.js";
+import { addShortEventMemory } from "../data/memory-short.js";
+import { addEventLog } from "../data/events-log.js";
 
 let weChatRuntime = null;
 const PLAYER_ID = "player";
@@ -63,6 +65,27 @@ export function initWeChatApp() {
     let messageBannerTarget = null;
     let unreadMomentsCount = getState("unreadMomentsCount") || 0;
     updateMomentsBadgeDisplay(unreadMomentsCount);
+
+    function rememberPhoneEvent(text, options = {}) {
+        if (!text) return;
+        const entry = {
+            type: options.type || "event",
+            app: options.app || "wechat",
+            text,
+            meta: options.meta || null,
+            time: Date.now()
+        };
+        try {
+            addShortEventMemory(entry);
+        } catch (err) {
+            console.warn("短期记忆记录失败", err);
+        }
+        try {
+            addEventLog({ text, type: entry.type, time: entry.time });
+        } catch (err) {
+            console.warn("事件日志写入失败", err);
+        }
+    }
 
     function syncUnreadTotals() {
         const totalUnread = chats.reduce((sum, c) => sum + (c.unread || 0), 0);
@@ -273,6 +296,11 @@ export function initWeChatApp() {
         };
         moment.comments.push(entry);
         persistMoments();
+        rememberPhoneEvent(`朋友圈评论 ${moment.who || "访客"}：${text}`, {
+            type: entryType === "mention" ? "moment_mention" : "moments",
+            app: "moments",
+            meta: { momentId: moment.id, mentions }
+        });
         const momentAuthorId = ensureMomentAuthor(moment);
         if (authorId !== PLAYER_ID) {
             if (mentions.includes(PLAYER_ID)) {
@@ -544,15 +572,26 @@ export function initWeChatApp() {
             comments: []
         };
         moments.unshift(entry);
+        rememberPhoneEvent(`我发朋友圈：${text}`, {
+            type: "moment_post",
+            app: "moments",
+            meta: { momentId: entry.id }
+        });
         persistMoments();
         renderMoments();
     }
 
     function toggleOwnMomentLike(moment) {
         if (!moment) return;
+        const action = moment.likedByUser ? "取消赞" : "点赞";
         const delta = moment.likedByUser ? -1 : 1;
         moment.likedByUser = !moment.likedByUser;
         moment.likes = Math.max(0, (moment.likes || 0) + delta);
+        rememberPhoneEvent(`我${action} ${moment.who} 的朋友圈`, {
+            type: action === "点赞" ? "moment_like" : "moment_unlike",
+            app: "moments",
+            meta: { momentId: moment.id }
+        });
         persistMoments();
         renderMoments();
     }
@@ -560,6 +599,11 @@ export function initWeChatApp() {
     function registerExternalMomentLike(moment, likerId) {
         if (!moment) return;
         moment.likes = Math.max(0, (moment.likes || 0) + 1);
+        rememberPhoneEvent(`${resolveContactNameById(likerId) || "访客"} 赞了 ${moment.who} 的朋友圈`, {
+            type: "moment_like",
+            app: "moments",
+            meta: { momentId: moment.id, actorId: likerId }
+        });
         persistMoments();
         renderMoments();
         handleMomentNotification("like", {
@@ -758,6 +802,11 @@ export function initWeChatApp() {
             notifyChatMessage(chat, msg);
         }
         persistChats();
+        rememberPhoneEvent(`${chat.name} 来信：${formatChatText(msg)}`, {
+            type: "wechat",
+            app: "wechat",
+            meta: { chatId: chat.id, direction: msg.from || "in" }
+        });
         if (active) {
             openChat(chat.id);
         } else {
@@ -786,6 +835,11 @@ export function initWeChatApp() {
         chatInput.value = "";
         setChatActions(false);
         persistChats();
+        rememberPhoneEvent(`我 → ${c.name}：${text}`, {
+            type: "wechat",
+            app: "wechat",
+            meta: { chatId: c.id, direction: "out" }
+        });
         openChat(id);
         renderChats();
         try {

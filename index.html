@@ -13,7 +13,7 @@
     <section id="story-panel">
         <header id="story-header">
             <div class="story-title"></div>
-            <div class="story-subtitle">轨迹</div>
+            <div class="story-subtitle">轨迹 • He Loves You. The World Fears Him.</div>
         </header>
         <main id="story-log">
             <!-- 之后由 JS 填充对话气泡 -->
@@ -36,6 +36,11 @@
                         <span class="icon-restart"></span>
                         <span>Restart</span>
                     </button>
+                    <label class="memory-limit-control">
+                        <span class="memory-label">Long Memory</span>
+                        <input id="long-memory-slider" type="range" min="1" max="12" value="3">
+                        <span id="long-memory-value" class="memory-value">3</span>
+                    </label>
                 </div>
             </div>
             <button id="story-send" class="click-anim" >发送</button>

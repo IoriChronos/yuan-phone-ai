@@ -15,7 +15,9 @@ import { applyAction } from "./core/action-router.js";
 import { getWorldState, addStoryMessage, subscribeWorldState } from "./data/world-state.js";
 import { resetStory, resetPhone, resetAll } from "./core/reset.js";
 import { updateSystemRules, appendDynamicRule } from "./data/system-rules.js";
-import { saveSnapshot } from "./core/timeline.js";
+import { saveSnapshot, restoreSnapshot } from "./core/timeline.js";
+import { getLongMemoryContextLimit, setLongMemoryContextLimit } from "./data/memory-long.js";
+import { addEventLog } from "./data/events-log.js";
 
 let storyUI = null;
 let storyBound = false;
@@ -47,7 +49,10 @@ document.addEventListener("DOMContentLoaded", () => {
         onSubmit: handleStorySubmit,
         onSystemSubmit: handleSystemInput,
         onRestart: handleRestartRequest,
-        onContinue: handleContinueRequest
+        onContinue: handleContinueRequest,
+        onBubbleAction: handleBubbleAction,
+        longMemoryLimit: getLongMemoryContextLimit(),
+        onLongMemoryChange: handleLongMemoryChange
     });
     hydrateStoryLog();
     bindStoryStream();
@@ -71,8 +76,12 @@ function bindStoryStream() {
     if (storyBound) return;
     subscribeWorldState((path, detail) => {
         if (path === "story:append" && detail?.message) {
-            storyUI?.appendBubble(detail.message.role, detail.message.text);
-            saveSnapshot(`${detail.message.role}:${Date.now()}`);
+            const bubble = storyUI?.appendBubble(detail.message);
+            const snapshotId = saveSnapshot(`${detail.message.role}:${Date.now()}`);
+            if (snapshotId) {
+                detail.message.snapshotId = snapshotId;
+                storyUI?.setBubbleSnapshot?.(bubble, snapshotId);
+            }
         }
     });
     storyBound = true;
@@ -80,12 +89,30 @@ function bindStoryStream() {
 
 async function handleStorySubmit(text) {
     addStoryMessage("user", text);
+    addEventLog({ text: `玩家：${text}`, type: "story" });
     await checkTriggers(text);
     await requestAIResponse(text, { skipTriggers: true });
 }
 
 async function handleContinueRequest() {
     await requestAIResponse("继续", { skipUser: true, skipTriggers: true });
+}
+
+function handleLongMemoryChange(value) {
+    setLongMemoryContextLimit(value);
+}
+
+async function handleBubbleAction(action, entry) {
+    if (!action || !entry) return;
+    if (action === "rewind" && entry.snapshotId) {
+        const restored = restoreSnapshot(entry.snapshotId);
+        if (restored) {
+            hydrateStoryLog();
+            refreshWeChatUI();
+        }
+    } else if (action === "retry" && entry.role === "system") {
+        await requestAIResponse("重说上一句", { skipUser: true, skipTriggers: true });
+    }
 }
 
 async function requestAIResponse(text, options = {}) {
