@@ -8,14 +8,19 @@ import {
 import { initDynamicIsland } from "./ui/dynamic-island.js";
 import { initMemoApp, addMemoEntry } from "./apps/memo.js";
 import { initWeChatApp, triggerWeChatNotification, triggerMomentsNotification, refreshWeChatUI } from "./apps/wechat.js";
-import { handleIslandCallAction, triggerIncomingCall } from "./apps/phone.js";
+import { handleIslandCallAction, triggerIncomingCall, resetCallInterface } from "./apps/phone.js";
 import { setTriggerHandlers, checkTriggers } from "./core/triggers.js";
-import { generateNarrativeReply } from "./core/ai.js";
+import {
+    generateNarrativeReply,
+    getProviderOptions,
+    setActiveProvider,
+    getActiveProviderId
+} from "./core/ai.js";
 import { applyAction } from "./core/action-router.js";
-import { getWorldState, addStoryMessage, subscribeWorldState } from "./data/world-state.js";
+import { getWorldState, addStoryMessage, subscribeWorldState, trimStoryAfter } from "./data/world-state.js";
 import { resetStory, resetPhone, resetAll } from "./core/reset.js";
 import { updateSystemRules, appendDynamicRule } from "./data/system-rules.js";
-import { saveSnapshot, restoreSnapshot } from "./core/timeline.js";
+import { saveSnapshot, restoreSnapshot, dropSnapshotsAfter } from "./core/timeline.js";
 import { getLongMemoryContextLimit, setLongMemoryContextLimit } from "./data/memory-long.js";
 import { addEventLog } from "./data/events-log.js";
 
@@ -52,7 +57,10 @@ document.addEventListener("DOMContentLoaded", () => {
         onContinue: handleContinueRequest,
         onBubbleAction: handleBubbleAction,
         longMemoryLimit: getLongMemoryContextLimit(),
-        onLongMemoryChange: handleLongMemoryChange
+        onLongMemoryChange: handleLongMemoryChange,
+        providerOptions: getProviderOptions(),
+        currentProvider: getActiveProviderId(),
+        onProviderChange: handleProviderChange
     });
     hydrateStoryLog();
     bindStoryStream();
@@ -64,6 +72,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 maybe.catch(err => console.error(err));
             }
         }
+    });
+
+    window.addEventListener("timeline:overflow", () => {
+        storyUI?.showTimelineToast?.("旧的快照已覆盖");
     });
 });
 
@@ -102,6 +114,10 @@ function handleLongMemoryChange(value) {
     setLongMemoryContextLimit(value);
 }
 
+function handleProviderChange(providerId) {
+    setActiveProvider(providerId);
+}
+
 async function handleBubbleAction(action, entry) {
     if (!action || !entry) return;
     if (action === "rewind" && entry.snapshotId) {
@@ -109,9 +125,17 @@ async function handleBubbleAction(action, entry) {
         if (restored) {
             hydrateStoryLog();
             refreshWeChatUI();
+            resetCallInterface();
+            storyUI.scrollToSnapshot?.(entry.snapshotId);
         }
     } else if (action === "retry" && entry.role === "system") {
-        await requestAIResponse("重说上一句", { skipUser: true, skipTriggers: true });
+        if (trimStoryAfter(entry.id)) {
+            dropSnapshotsAfter(entry.snapshotId);
+            hydrateStoryLog();
+            refreshWeChatUI();
+            resetCallInterface();
+            await requestAIResponse("重说上一句", { skipUser: true, skipTriggers: true });
+        }
     }
 }
 

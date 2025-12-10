@@ -72,10 +72,17 @@ const defaultStory = [
     { role: "system", text: "主线从这里开始。你可以先随便说几句，之后我们再把它接到 AI 上。", time: Date.now() }
 ];
 
+function createId(prefix = "id") {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function createDefaultState() {
     return {
         systemVersion: SYSTEM_VERSION,
-        story: defaultStory.map(entry => ({ ...entry })),
+        story: defaultStory.map(entry => ({ ...entry, id: entry.id || createId("story") })),
         contacts: initialContacts.map(c => ({ ...c })),
         chats: initialChats().map(enrichChat),
         chatOrder: ["yuan", "room", "shadow", "sys"],
@@ -172,7 +179,10 @@ export function initializeWorldState(loadedState = null) {
         worldState.eventsLog = (loadedState.eventsLog || []).slice(-100);
         worldState.wallet = loadedState.wallet || base.wallet;
         worldState.blackFog = loadedState.blackFog || base.blackFog;
-        worldState.story = (loadedState.story || base.story).map(entry => ({ ...entry }));
+        worldState.story = (loadedState.story || base.story).map(entry => ({
+            ...entry,
+            id: entry.id || createId("story")
+        }));
         worldState.unread = loadedState.unread || base.unread;
         worldState.triggers = (loadedState.triggers || base.triggers).slice(-20);
         worldState.lastAppOpened = loadedState.lastAppOpened || base.lastAppOpened;
@@ -217,11 +227,23 @@ export function addStoryMessage(role, text, meta = {}) {
         role,
         text,
         time: meta.time || Date.now(),
-        meta: meta.meta || null
+        meta: meta.meta || null,
+        id: meta.id || createId("story")
     };
     worldState.story.push(entry);
     addShortMemory(entry);
     emit("story:append", { message: entry });
+    return entry;
+}
+
+export function trimStoryAfter(messageId) {
+    if (!messageId) return false;
+    const index = worldState.story.findIndex(item => item.id === messageId);
+    if (index === -1) return false;
+    worldState.story.splice(index);
+    hydrateShortMemory(worldState.story);
+    emit("story:trim", { messageId });
+    return true;
 }
 
 export function addChatMessage(chatId, message = {}) {
@@ -259,6 +281,23 @@ export function markChatRead(chatId) {
     emit("chats:read", { chatId });
 }
 
+export function sendMessage(chatId, text, author = "out", meta = {}) {
+    if (!chatId || !text) return null;
+    const direction = meta.direction || author;
+    return addChatMessage(chatId, {
+        from: direction === "system" ? "in" : direction,
+        text,
+        kind: meta.kind,
+        amount: meta.amount,
+        redeemed: meta.redeemed,
+        time: meta.time
+    });
+}
+
+export function appendSystemMessage(chatId, text, meta = {}) {
+    return sendMessage(chatId, text, "in", meta);
+}
+
 export function addMomentComment(momentId, comment) {
     const moment = getMomentById(momentId);
     if (!moment) return;
@@ -281,6 +320,34 @@ export function addMomentComment(momentId, comment) {
     emit("moments:comment", { momentId, comment: entry });
 }
 
+export function commentMoment(momentId, authorId = "player", text, mentions = [], type = "comment") {
+    if (!text) return null;
+    const fromName = authorId === "player"
+        ? "你"
+        : (worldState.contacts.find(c => c.id === authorId)?.name || "访客");
+    return addMomentComment(momentId, {
+        from: fromName,
+        text,
+        type,
+        authorId,
+        mentions
+    });
+}
+
+export function likeMoment(momentId, userId = "player", liked = true) {
+    const moment = getMomentById(momentId);
+    if (!moment) return null;
+    const current = userId === "player" ? Boolean(moment.likedByUser) : false;
+    const shouldLike = typeof liked === "boolean" ? liked : !current;
+    const delta = shouldLike ? 1 : -1;
+    if (userId === "player") {
+        moment.likedByUser = shouldLike;
+    }
+    moment.likes = Math.max(0, (moment.likes || 0) + delta);
+    emit("moments:like", { momentId, userId, liked: shouldLike });
+    return moment;
+}
+
 export function addMomentPost(post) {
     const entry = enrichMoment({
         ...post,
@@ -288,6 +355,21 @@ export function addMomentPost(post) {
     }, worldState.contacts);
     worldState.moments.unshift(entry);
     emit("moments:post", { post: entry });
+    return entry;
+}
+
+export function postMoment(text, images = [], authorId = "player") {
+    if (!text) return null;
+    const who = authorId === "player"
+        ? "你"
+        : (worldState.contacts.find(c => c.id === authorId)?.name || "访客");
+    return addMomentPost({
+        who,
+        authorId,
+        text,
+        images,
+        time: "刚刚"
+    });
 }
 
 export function incrementMomentsUnread(delta = 1) {
@@ -304,12 +386,20 @@ export function clearMomentsUnread() {
     emit("moments:unread", { count: 0 });
 }
 
-export function addCallLog(entry) {
+export function addCallLog(entryOrType) {
+    let payload = entryOrType;
+    if (typeof entryOrType !== "object") {
+        payload = {
+            note: entryOrType,
+            name: arguments[1],
+            transcript: arguments[2]
+        };
+    }
     const record = {
-        name: entry.name || "未知来电",
-        time: entry.time || "刚刚",
-        note: entry.note || "",
-        transcript: entry.transcript || []
+        name: payload.name || "未知来电",
+        time: payload.time || "刚刚",
+        note: payload.note || "",
+        transcript: payload.transcript || []
     };
     worldState.callHistory.unshift(record);
     worldState.callHistory = worldState.callHistory.slice(0, 50);
@@ -317,7 +407,7 @@ export function addCallLog(entry) {
         type: "call",
         app: "phone",
         text: `${record.name} · ${record.note || "通话"}`,
-        meta: { direction: entry.direction || record.note }
+        meta: { direction: payload.direction || record.note }
     });
     emit("calls:add", { record });
     return 0;
@@ -328,6 +418,23 @@ export function updateCallLog(index, patch) {
     if (!record) return;
     worldState.callHistory[index] = { ...record, ...patch };
     emit("calls:update", { index, record: worldState.callHistory[index] });
+}
+
+export function addCallHistory(type = "来电", from = "未知来电", transcript = []) {
+    return addCallLog({
+        note: type,
+        name: from,
+        transcript
+    });
+}
+
+export function setIncomingCall(state = "idle", caller = null) {
+    worldState.incomingCall = {
+        state,
+        caller,
+        time: Date.now()
+    };
+    emit("calls:incoming", worldState.incomingCall);
 }
 
 export function addMemoEntry(text) {
@@ -367,6 +474,23 @@ export function adjustWalletBalance(delta, meta = {}) {
         time: Date.now()
     });
     emit("wallet:update", { balance: worldState.wallet.balance });
+}
+
+export function sendTransfer(amount, reason = "转账") {
+    const delta = Number(amount) || 0;
+    adjustWalletBalance(delta, { source: reason });
+    return worldState.wallet.balance;
+}
+
+export function sendRedPacket(amount) {
+    const delta = -Math.abs(Number(amount) || 0);
+    adjustWalletBalance(delta, { source: "红包发送" });
+    return worldState.wallet.balance;
+}
+
+export function openRedPacket(packetId, amount = 0) {
+    adjustWalletBalance(Math.abs(Number(amount) || 0), { source: "红包" });
+    emit("wallet:redpacket", { packetId, amount });
 }
 
 export function setBlackFogData(data) {

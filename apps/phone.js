@@ -222,3 +222,18 @@ function startTranscriptLoop(name) {
     };
     pump();
 }
+
+export function resetCallInterface() {
+    ensureCallOverlayElements();
+    if (callOverlayState.container) {
+        callOverlayState.container.classList.remove("show");
+    }
+    stopTranscriptLoop();
+    callOverlayState.startTime = 0;
+    callOverlayState.activeName = "";
+    callOverlayState.direction = "";
+    callOverlayState.historyIndex = null;
+    callOverlayState.transcriptLog = [];
+    setIslandLabel(DEFAULT_ISLAND_LABEL);
+    collapseIslandAfterCall();
+}

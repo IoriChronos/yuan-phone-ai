@@ -26,6 +26,7 @@ export function saveSnapshot(label = "") {
     snapshots.push(snapshot);
     if (snapshots.length > MAX_SNAPSHOTS) {
         snapshots.shift();
+        notifyOverflow();
     }
     return snapshot.id;
 }
@@ -51,9 +52,21 @@ export function restoreSnapshot(snapshotId) {
     return true;
 }
 
+export function dropSnapshotsAfter(snapshotId) {
+    if (!snapshotId || !snapshots.length) return;
+    const index = snapshots.findIndex(s => s.id === snapshotId);
+    if (index === -1) return;
+    snapshots.splice(index);
+}
+
 function cryptoRandomId() {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
         return crypto.randomUUID();
     }
     return `snap-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function notifyOverflow() {
+    if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+    window.dispatchEvent(new CustomEvent("timeline:overflow"));
 }

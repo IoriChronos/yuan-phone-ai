@@ -22,10 +22,10 @@
             <button id="input-collapse-btn" class="hidden">⌄</button>
             <textarea id="story-input" rows="2" placeholder="在这里输入给元书的话…"></textarea>
             <div class="story-tools">
-                <button id="story-tools-btn" class="pixel-tool-btn" aria-label="更多工具">
-                    <span class="pixel-dot"></span>
-                    <span class="pixel-dot"></span>
-                    <span class="pixel-dot"></span>
+                <button id="story-tools-btn" class="story-tools-toggle" aria-label="更多工具">
+                    <span class="tool-bar top"></span>
+                    <span class="tool-bar middle"></span>
+                    <span class="tool-bar bottom"></span>
                 </button>
                 <div id="story-tools-menu" class="story-tools-menu" aria-hidden="true">
                     <button id="story-tool-system">
@@ -36,6 +36,10 @@
                         <span class="icon-restart"></span>
                         <span>Restart</span>
                     </button>
+                    <div class="provider-control">
+                        <span>Provider</span>
+                        <select id="ai-provider-select"></select>
+                    </div>
                     <label class="memory-limit-control">
                         <span class="memory-label">Long Memory</span>
                         <input id="long-memory-slider" type="range" min="1" max="12" value="3">

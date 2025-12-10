@@ -6,7 +6,18 @@ import {
 } from "./phone.js";
 import { openPhonePage, showPhoneFloatingAlert } from "../ui/phone.js";
 import { triggerIslandNotify } from "../ui/dynamic-island.js";
-import { incrementMomentsUnread, clearMomentsUnread } from "../data/world-state.js";
+import {
+    incrementMomentsUnread,
+    clearMomentsUnread,
+    sendMessage as sendWeChatMessage,
+    markChatRead as worldMarkChatRead,
+    postMoment as worldPostMoment,
+    likeMoment as worldLikeMoment,
+    commentMoment as worldCommentMoment,
+    sendTransfer as walletSendTransfer,
+    sendRedPacket as walletSendRedPacket,
+    openRedPacket as walletOpenRedPacket
+} from "../data/world-state.js";
 import { addShortEventMemory } from "../data/memory-short.js";
 import { addEventLog } from "../data/events-log.js";
 
@@ -96,18 +107,11 @@ export function initWeChatApp() {
     }
 
     function persistChats() {
-        updateState("phone.chats", chats);
         syncUnreadTotals();
     }
 
     function persistMoments() {
-        moments.forEach(ensureMomentAuthor);
-        updateState("phone.moments", moments);
-    }
-
-    function persistWallet() {
-        wallet.balance = walletBalance;
-        updateState("phone.wallet", wallet);
+        // 数据通过 world-state API 写入，这里只负责刷新 UI。
     }
 
     function getCallHistory() {
@@ -282,20 +286,11 @@ export function initWeChatApp() {
             mentionedContactIds,
             triggerEcho = true
         } = typeof options === "object" ? options : {};
-        moment.comments = moment.comments || [];
         const mentions = (mentionedContactIds && mentionedContactIds.length)
             ? mentionedContactIds
             : extractMentionedContactIds(text);
         const entryType = type || (mentions.length ? "mention" : "comment");
-        const entry = {
-            text,
-            type: entryType,
-            time: new Date(),
-            authorId,
-            mentions
-        };
-        moment.comments.push(entry);
-        persistMoments();
+        worldCommentMoment(moment.id, authorId, text, mentions, entryType);
         rememberPhoneEvent(`朋友圈评论 ${moment.who || "访客"}：${text}`, {
             type: entryType === "mention" ? "moment_mention" : "moments",
             app: "moments",
@@ -346,6 +341,10 @@ export function initWeChatApp() {
     }
 
     function updateWalletDisplay() {
+        const latest = getState("phone.wallet")?.balance;
+        if (typeof latest === "number") {
+            walletBalance = latest;
+        }
         if (walletAmtEl) walletAmtEl.textContent = `¥ ${walletBalance.toFixed(2)}`;
     }
 
@@ -561,50 +560,35 @@ export function initWeChatApp() {
 
     function publishMoment(text) {
         if (!text) return;
-        const entry = {
-            id: `moment-${Date.now()}`,
-            who: "你",
-            authorId: PLAYER_ID,
-            text,
-            time: "刚刚",
-            likes: 0,
-            likedByUser: false,
-            comments: []
-        };
-        moments.unshift(entry);
+        const entry = worldPostMoment(text, [], PLAYER_ID);
         rememberPhoneEvent(`我发朋友圈：${text}`, {
             type: "moment_post",
             app: "moments",
-            meta: { momentId: entry.id }
+            meta: { momentId: entry?.id }
         });
-        persistMoments();
         renderMoments();
     }
 
     function toggleOwnMomentLike(moment) {
         if (!moment) return;
         const action = moment.likedByUser ? "取消赞" : "点赞";
-        const delta = moment.likedByUser ? -1 : 1;
-        moment.likedByUser = !moment.likedByUser;
-        moment.likes = Math.max(0, (moment.likes || 0) + delta);
+        worldLikeMoment(moment.id, PLAYER_ID, !moment.likedByUser);
         rememberPhoneEvent(`我${action} ${moment.who} 的朋友圈`, {
             type: action === "点赞" ? "moment_like" : "moment_unlike",
             app: "moments",
             meta: { momentId: moment.id }
         });
-        persistMoments();
         renderMoments();
     }
 
     function registerExternalMomentLike(moment, likerId) {
         if (!moment) return;
-        moment.likes = Math.max(0, (moment.likes || 0) + 1);
+        worldLikeMoment(moment.id, likerId, true);
         rememberPhoneEvent(`${resolveContactNameById(likerId) || "访客"} 赞了 ${moment.who} 的朋友圈`, {
             type: "moment_like",
             app: "moments",
             meta: { momentId: moment.id, actorId: likerId }
         });
-        persistMoments();
         renderMoments();
         handleMomentNotification("like", {
             actorId: likerId,
@@ -664,7 +648,7 @@ export function initWeChatApp() {
     function openChat(id) {
         const c = chats.find(x => x.id === id);
         if (!c || !chatWindow || !chatLog) return;
-        c.unread = 0;
+        worldMarkChatRead(id);
         persistChats();
         Object.entries(panels).forEach(([, el]) => {
             if (el) el.style.display = "none";
@@ -701,12 +685,6 @@ export function initWeChatApp() {
         if (wechatTop) wechatTop.textContent = c.name;
         if (chatHeadControls) chatHeadControls.style.display = "flex";
         renderChats();
-    }
-
-    function adjustWallet(delta) {
-        walletBalance = Math.max(0, walletBalance + delta);
-        persistWallet();
-        updateWalletDisplay();
     }
 
     function setChatActions(open) {
@@ -793,19 +771,22 @@ export function initWeChatApp() {
 
     function handleIncomingMessage(chat, msg) {
         if (!chat) return;
-        chat.log.push(msg);
-        chat.preview = formatChatText(msg);
-        chat.time = "刚刚";
+        const payload = {
+            kind: msg.kind,
+            amount: msg.amount,
+            redeemed: msg.redeemed
+        };
+        sendWeChatMessage(chat.id, msg.text || formatChatText(msg), "in", payload);
+        const updatedChat = getState("phone.chats").find(c => c.id === chat.id) || chat;
         const active = isChatActive(chat.id);
         if (!active) {
-            chat.unread = (chat.unread || 0) + 1;
-            notifyChatMessage(chat, msg);
+            notifyChatMessage(updatedChat, msg);
         }
         persistChats();
-        rememberPhoneEvent(`${chat.name} 来信：${formatChatText(msg)}`, {
+        rememberPhoneEvent(`${updatedChat.name} 来信：${formatChatText(msg)}`, {
             type: "wechat",
             app: "wechat",
-            meta: { chatId: chat.id, direction: msg.from || "in" }
+            meta: { chatId: chat.id, direction: "in" }
         });
         if (active) {
             openChat(chat.id);
@@ -822,16 +803,12 @@ export function initWeChatApp() {
         const text = (textOverride != null ? textOverride : chatInput.value.trim());
         if (!text) return;
         const kind = kindOverride || "";
-        const msg = {
-            from: "out",
-            text,
+        const payload = {
             kind,
+            amount: meta.amount,
+            redeemed: meta.redeemed
         };
-        if (meta.amount != null) msg.amount = meta.amount;
-        if (meta.redeemed) msg.redeemed = true;
-        c.log.push(msg);
-        c.preview = text;
-        c.time = "刚刚";
+        sendWeChatMessage(id, text, "out", payload);
         chatInput.value = "";
         setChatActions(false);
         persistChats();
@@ -885,10 +862,12 @@ export function initWeChatApp() {
             const formatted = amount.toFixed(2);
             if (currentChatAction.type === "pay") {
                 sendChat(`转账 ¥${formatted}`, "pay", { amount });
-                adjustWallet(-amount);
+                walletSendTransfer(-amount, "微信转账");
+                updateWalletDisplay();
             } else if (currentChatAction.type === "red") {
                 sendChat(`红包 ¥${formatted}`, "red", { amount, redeemed: true });
-                adjustWallet(-amount);
+                walletSendRedPacket(amount);
+                updateWalletDisplay();
             }
             closeChatActionForm();
             setChatActions(false);
@@ -907,9 +886,10 @@ export function initWeChatApp() {
                 msg.redeemed = true;
                 if (msg.amount != null) {
                     msg.text = `已收红包 ¥${msg.amount.toFixed(2)}`;
-                    adjustWallet(msg.amount);
+                    walletOpenRedPacket(msg.id || Date.now(), msg.amount);
                 }
                 persistChats();
+                updateWalletDisplay();
                 const activeId = chatWindow ? chatWindow.dataset.chat : null;
                 if (activeId && pendingRedEnvelope.chatId === activeId) {
                     openChat(activeId);
@@ -1063,19 +1043,17 @@ export function initWeChatApp() {
             const targetChat = chats.find(x => x.id === "yuan");
             if (targetChat) {
                 const wasActive = isChatActive(targetChat.id);
-                targetChat.log.push({ from:"in", text:"黑雾覆盖：他在看你。" });
-                targetChat.log.push({ from:"in", text:"红包 ¥18.00", kind:"red", amount: 18.00, redeemed: false });
-                targetChat.log.push({ from:"in", text:"转账 ¥66.00", kind:"pay", amount: 66.00 });
-                targetChat.preview = "转账 ¥66.00";
-                targetChat.time = "刚刚";
+                sendWeChatMessage(targetChat.id, "黑雾覆盖：他在看你。", "in");
+                sendWeChatMessage(targetChat.id, "红包 ¥18.00", "in", { kind: "red", amount: 18.00, redeemed: false });
+                sendWeChatMessage(targetChat.id, "转账 ¥66.00", "in", { kind: "pay", amount: 66.00 });
+                walletSendTransfer(66, "黑雾注入");
+                updateWalletDisplay();
                 if (wasActive) {
                     openChat(targetChat.id);
                 } else {
-                    targetChat.unread = (targetChat.unread || 0) + 3;
                     notifyChatMessage(targetChat, targetChat.log[targetChat.log.length - 1]);
                 }
                 persistChats();
-                adjustWallet(66);
                 renderChats();
             }
         });

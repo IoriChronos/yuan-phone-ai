@@ -190,30 +190,31 @@ body.mobile-mode #app {
     position: relative;
 }
 
-.pixel-tool-btn {
-    width: 36px;
+.story-tools-toggle {
+    width: 40px;
     height: 36px;
-    border-radius: 12px;
+    border-radius: 16px;
     border: 1px solid rgba(255,255,255,0.18);
-    background: rgba(0,0,0,0.45);
+    background: linear-gradient(180deg, rgba(90,60,90,0.4), rgba(30,15,25,0.7));
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
     cursor: pointer;
-    transition: border 0.2s ease, transform 0.2s ease;
+    transition: border 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.pixel-tool-btn .pixel-dot {
-    width: 6px;
-    height: 3px;
+.story-tools-toggle .tool-bar {
+    width: 14px;
+    height: 2px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.75);
 }
 
-.pixel-tool-btn.active {
+.story-tools-toggle.active {
     border-color: rgba(255,200,150,0.6);
+    box-shadow: 0 0 8px rgba(255,200,150,0.25);
     transform: translateY(-1px);
 }
 
@@ -254,6 +255,26 @@ body.mobile-mode #app {
     color: #f5e9f3;
     font-size: 12px;
     cursor: pointer;
+}
+
+.provider-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.75);
+}
+
+.provider-control select {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #f6eaf3;
+    border-radius: 10px;
+    padding: 4px 6px;
 }
 
 .memory-limit-control {
@@ -447,6 +468,25 @@ body.mobile-mode #app {
 
 #story-context-menu button:hover {
     background: rgba(255,255,255,0.07);
+}
+
+.story-toast {
+    position: absolute;
+    right: 16px;
+    bottom: 72px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    backdrop-filter: blur(8px);
+    color: rgba(255,255,255,0.85);
+    font-size: 12px;
+    animation: toastIn 0.25s ease forwards;
+}
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 #story-input {
     scrollbar-width: none;

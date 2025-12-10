@@ -1,4 +1,4 @@
-import { AI_CONFIG } from "../config.js";
+import { AI_CONFIG, AI_PROVIDERS } from "../config.js";
 import { getWorldState } from "../data/world-state.js";
 import { getShortMemory } from "../data/memory-short.js";
 import {
@@ -8,9 +8,110 @@ import {
 } from "../data/memory-long.js";
 import { buildSystemPrompt } from "../data/system-rules.js";
 
+const PROVIDER_STORAGE_KEY = "yuan-phone:ai-provider";
+const TASK_MODEL_MAP = {
+    story: "PRIMARY_STORY_MODEL",
+    summarize: "CHEAP_SUMMARIZER_MODEL",
+    classify: "ROUTER_MODEL",
+    "tool-plan": "ROUTER_MODEL"
+};
+
+let activeProviderId = loadActiveProviderId();
+
+function loadActiveProviderId() {
+    if (typeof window === "undefined" || !window.localStorage) {
+        return AI_CONFIG.defaultProvider || (AI_PROVIDERS[0]?.id ?? "groq");
+    }
+    const saved = window.localStorage.getItem(PROVIDER_STORAGE_KEY);
+    return saved || AI_CONFIG.defaultProvider || (AI_PROVIDERS[0]?.id ?? "groq");
+}
+
+function persistActiveProvider(id) {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.setItem(PROVIDER_STORAGE_KEY, id);
+}
+
+function resolveProvider(id = activeProviderId) {
+    return AI_PROVIDERS.find(p => p.id === id) || AI_PROVIDERS[0] || {
+        id: "default",
+        label: "Default",
+        apiKey: "",
+        apiBase: "",
+        PRIMARY_STORY_MODEL: AI_CONFIG.PRIMARY_STORY_MODEL,
+        CHEAP_SUMMARIZER_MODEL: AI_CONFIG.CHEAP_SUMMARIZER_MODEL,
+        ROUTER_MODEL: AI_CONFIG.ROUTER_MODEL
+    };
+}
+
+export function getProviderOptions() {
+    return AI_PROVIDERS.map(provider => ({
+        id: provider.id,
+        label: provider.label
+    }));
+}
+
+export function getActiveProviderId() {
+    return activeProviderId;
+}
+
+export function setActiveProvider(id) {
+    if (!id || id === activeProviderId) return resolveProvider();
+    activeProviderId = id;
+    persistActiveProvider(id);
+    return resolveProvider();
+}
+
+export async function callModel(task = "story", { messages = [], maxTokens } = {}) {
+    const provider = resolveProvider();
+    const modelKey = TASK_MODEL_MAP[task] || TASK_MODEL_MAP.story;
+    const modelName = provider[modelKey] || AI_CONFIG[modelKey];
+    if (!modelName) {
+        throw new Error(`Missing model for task ${task}`);
+    }
+    const body = {
+        model: modelName,
+        messages
+    };
+    if (maxTokens) {
+        body.max_tokens = maxTokens;
+    }
+    return performAIRequest(provider, body);
+}
+
+async function performAIRequest(provider, body) {
+    try {
+        const systemPrompt = buildSystemPrompt();
+        const hasSystem = body.messages.some(msg => msg.role === "system");
+        if (!hasSystem && AI_CONFIG.systemPrompt) {
+            body.messages.unshift({ role: "system", content: AI_CONFIG.systemPrompt });
+        }
+        if (systemPrompt) {
+            body.messages.unshift({ role: "system", content: systemPrompt });
+        }
+        const res = await fetch(provider.apiBase, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${provider.apiKey}`
+            },
+            body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        return json.choices?.[0]?.message?.content || "";
+    } catch (err) {
+        console.warn("AI request failed", err);
+        return "";
+    }
+}
+
 export async function askAI(userInput = "") {
     const prompt = buildContextDocument(userInput);
-    const reply = await callGroq(prompt);
+    const reply = await callModel("story", {
+        messages: [
+            { role: "system", content: AI_CONFIG.systemPrompt },
+            { role: "user", content: prompt }
+        ]
+    });
     return reply || "";
 }
 
@@ -66,7 +167,12 @@ async function requestAction(kind, userInput, fallback) {
 禁止说明文字，只能是 JSON。
 Kind: ${kind}`.trim();
     const prompt = `${instruction}\n\n${buildContextDocument(userInput || "（剧情联动）")}`;
-    const response = await callGroq(prompt);
+    const response = await callModel("story", {
+        messages: [
+            { role: "system", content: AI_CONFIG.systemPrompt },
+            { role: "user", content: prompt }
+        ]
+    });
     const action = parseAction(response);
     return action || (typeof fallback === "function" ? fallback() : null);
 }
@@ -150,35 +256,6 @@ function formatStoryMemory(entry) {
 function formatEventMemory(entry) {
     const badge = entry.app === "moments" ? "朋友圈" : entry.app === "phone" ? "电话" : "微信";
     return `[${badge}] ${entry.text}`;
-}
-
-async function callGroq(prompt) {
-    try {
-        const systemRules = buildSystemPrompt();
-        const messages = [
-            { role: "system", content: AI_CONFIG.systemPrompt }
-        ];
-        if (systemRules) {
-            messages.push({ role: "system", content: systemRules });
-        }
-        messages.push({ role: "user", content: prompt });
-        const res = await fetch(AI_CONFIG.apiBase, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${AI_CONFIG.apiKey}`
-            },
-            body: JSON.stringify({
-                model: AI_CONFIG.model,
-                messages
-            })
-        });
-        const json = await res.json();
-        return json.choices?.[0]?.message?.content || "";
-    } catch (err) {
-        console.warn("Groq request failed", err);
-        return "";
-    }
 }
 
 function parseAction(text) {

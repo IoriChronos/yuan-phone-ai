@@ -11,6 +11,7 @@ export function initAIChatWindow(options = {}) {
     const restartButtons = restartSheet?.querySelectorAll("[data-restart]");
     const memorySlider = document.getElementById("long-memory-slider");
     const memoryValue = document.getElementById("long-memory-value");
+    const providerSelect = document.getElementById("ai-provider-select");
 
     if (!storyLog || !storyInput || !storySend) {
         throw new Error("AI chat window elements missing");
@@ -19,6 +20,7 @@ export function initAIChatWindow(options = {}) {
     let systemMode = false;
     let continueBtn = null;
     let contextMenu = null;
+    let latestSystemId = null;
 
     function limitTwoLines() {
         storyInput.classList.remove("expanded");
@@ -55,6 +57,9 @@ export function initAIChatWindow(options = {}) {
         bubble.className = `story-bubble ${role}`;
         bubble.textContent = entry.text || "";
         bubble.dataset.role = role;
+        if (entry.id) {
+            bubble.dataset.message = entry.id;
+        }
         if (entry.snapshotId) {
             bubble.dataset.snapshot = entry.snapshotId;
         }
@@ -67,6 +72,7 @@ export function initAIChatWindow(options = {}) {
             continueBtn = null;
         }
         if (role === "system") {
+            latestSystemId = entry.id || latestSystemId;
             continueBtn = document.createElement("button");
             continueBtn.className = "continue-btn";
             continueBtn.textContent = "继续说";
@@ -151,9 +157,9 @@ export function initAIChatWindow(options = {}) {
     function resolveBubbleActions(entry = {}) {
         const items = [];
         if (entry.snapshotId) {
-            items.push({ id: "rewind", label: "撤回到此处" });
+            items.push({ id: "rewind", label: "回溯到此刻" });
         }
-        if (entry.role === "system") {
+        if (entry.role === "system" && entry.id && entry.id === latestSystemId) {
             items.push({ id: "retry", label: "重说这一句" });
         }
         return items;
@@ -271,6 +277,50 @@ export function initAIChatWindow(options = {}) {
         });
     }
 
+    function initProviderControl() {
+        if (!providerSelect) return;
+        const providers = options.providerOptions || [];
+        providerSelect.innerHTML = "";
+        providers.forEach(provider => {
+            const opt = document.createElement("option");
+            opt.value = provider.id;
+            opt.textContent = provider.label;
+            providerSelect.appendChild(opt);
+        });
+        const initial = options.currentProvider || providers[0]?.id;
+        if (initial) providerSelect.value = initial;
+        providerSelect.addEventListener("change", () => {
+            options.onProviderChange?.(providerSelect.value);
+        });
+    }
+
+    function scrollToSnapshot(snapshotId) {
+        if (!snapshotId || !storyLog) return;
+        const bubble = storyLog.querySelector(`[data-snapshot="${snapshotId}"]`);
+        if (bubble) {
+            bubble.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    }
+
+    function showToast(text) {
+        if (!text) return;
+        let toast = document.createElement("div");
+        toast.className = "story-toast";
+        toast.textContent = text;
+        storyPanel().appendChild(toast);
+        setTimeout(() => toast.remove(), 2600);
+    }
+
+    function storyPanel() {
+        return document.getElementById("story-panel") || document.body;
+    }
+
+    function refreshLatestSystem(entries = []) {
+        const lastSystem = [...entries].reverse().find(item => item.role === "system");
+        latestSystemId = lastSystem?.id || null;
+    }
+
+    initProviderControl();
     initMemorySliderControl();
     limitTwoLines();
 
@@ -282,9 +332,13 @@ export function initAIChatWindow(options = {}) {
             storyLog.innerHTML = "";
             continueBtn = null;
             closeBubbleMenu();
+            latestSystemId = null;
             entries.forEach(entry => appendBubble(entry));
+            refreshLatestSystem(entries);
         },
         exitSystemMode: () => toggleSystemMode(false),
-        setBubbleSnapshot: setBubbleSnapshot
+        setBubbleSnapshot: setBubbleSnapshot,
+        scrollToSnapshot,
+        showTimelineToast: showToast
     };
 }

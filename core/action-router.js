@@ -1,7 +1,7 @@
 import {
     addStoryMessage,
-    addChatMessage,
-    addMomentComment,
+    sendMessage,
+    commentMoment,
     addCallLog,
     updateCallLog
 } from "../data/world-state.js";
@@ -21,9 +21,7 @@ export function applyAction(action) {
             }
             break;
         case "send_wechat":
-            addChatMessage(payload.chatId || "yuan", {
-                from: payload.from || "in",
-                text: payload.text,
+            sendMessage(payload.chatId || "yuan", payload.text || "", payload.from || "in", {
                 kind: payload.kind,
                 amount: payload.amount
             });
@@ -33,11 +31,13 @@ export function applyAction(action) {
             });
             break;
         case "add_moment_comment":
-            addMomentComment(payload.momentId, {
-                from: payload.from || "AI",
-                text: payload.text,
-                type: payload.type || "comment"
-            });
+            commentMoment(
+                payload.momentId,
+                payload.authorId || payload.from || "npc",
+                payload.text || "",
+                payload.mentions || [],
+                payload.type || "comment"
+            );
             addEventLog({
                 text: `朋友圈评论 ${payload.momentId || "unknown"}：${payload.text || ""}`,
                 type: payload.type === "mention" ? "moment_mention" : "moments"
