@@ -5,6 +5,8 @@ let dynamicIslandContent = null;
 let dynamicIslandLabel = DEFAULT_ISLAND_LABEL;
 let islandCallContainer = null;
 let islandCallName = null;
+let islandBubble = null;
+let bubbleTimer = null;
 let initialized = false;
 let callActionHandler = null;
 
@@ -28,9 +30,18 @@ function ensureIslandElements() {
     }
 }
 
+function ensureBubbleElement() {
+    ensureIslandElements();
+    if (!dynamicIsland || islandBubble) return;
+    islandBubble = document.createElement("div");
+    islandBubble.className = "island-bubble";
+    dynamicIsland.appendChild(islandBubble);
+}
+
 export function initDynamicIsland(options = {}) {
     callActionHandler = options.onCallAction || null;
     ensureIslandElements();
+    ensureBubbleElement();
     if (dynamicIslandContent && dynamicIslandContent.textContent) {
         dynamicIslandLabel = dynamicIslandContent.textContent;
     }
@@ -80,4 +91,25 @@ export function hideIslandCallAlert() {
     if (!dynamicIsland || !islandCallContainer) return;
     dynamicIsland.classList.remove("call-alert");
     islandCallContainer.setAttribute("aria-hidden", "true");
+}
+
+export function playIslandMessage(label = "", bubbleText = "") {
+    ensureBubbleElement();
+    if (label) setIslandLabel(label);
+    if (!dynamicIsland) return;
+    dynamicIsland.classList.add("pop");
+    setTimeout(() => dynamicIsland?.classList.remove("pop"), 900);
+    if (islandBubble && bubbleText) {
+        islandBubble.textContent = bubbleText;
+        islandBubble.classList.add("show");
+        if (bubbleTimer) clearTimeout(bubbleTimer);
+        bubbleTimer = setTimeout(() => {
+            islandBubble?.classList.remove("show");
+        }, 1600);
+    }
+}
+
+export function collapseIslandAfterCall() {
+    hideIslandCallAlert();
+    setIslandLabel(DEFAULT_ISLAND_LABEL);
 }

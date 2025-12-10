@@ -1,10 +1,12 @@
 import { getState, updateState, subscribeState } from "../core/state.js";
-import { addMemoEntry } from "./memo.js";
+import { askAI } from "../core/ai.js";
 import {
     triggerIncomingCall as phoneTriggerIncomingCall,
     triggerOutgoingCall
 } from "./phone.js";
 import { openPhonePage, showPhoneFloatingAlert } from "../ui/phone.js";
+
+let weChatRuntime = null;
 
 export function initWeChatApp() {
     const tabs = document.querySelectorAll(".wechat-tabs button");
@@ -84,16 +86,25 @@ export function initWeChatApp() {
         mention: ["@你 在吗？", "@你 别怕，我在。", "@你 记得回信。"]
     };
 
-    function addMomentComment(moment, text, type = "comment") {
+    async function addMomentComment(moment, text, type = "comment") {
         if (!moment || !text) return;
         moment.comments = moment.comments || [];
         moment.comments.push({ text, type, time: new Date() });
         persistMoments();
-        addMemoEntry(`朋友圈评论 · ${text}`);
         if (type === "mention") {
             showPhoneFloatingAlert("@ 提醒");
         }
         renderMoments();
+        try {
+            const aiEcho = await askAI(`朋友圈互动：${moment.who} 发布了「${moment.text}」，请跟进一句回复。`);
+            if (aiEcho) {
+                moment.comments.push({ text: aiEcho, type: "ai", time: new Date() });
+                persistMoments();
+                renderMoments();
+            }
+        } catch (err) {
+            console.error("AI 评论失败", err);
+        }
     }
 
     function formatChatText(message) {
@@ -238,7 +249,7 @@ export function initWeChatApp() {
                 const btn = document.createElement("button");
                 btn.textContent = text;
                 btn.addEventListener("click", () => {
-                    addMomentComment(m, text, "comment");
+                    addMomentComment(m, text, "comment").catch(err => console.error(err));
                 });
                 commentWrap.appendChild(btn);
             });
@@ -251,7 +262,7 @@ export function initWeChatApp() {
                 const btn = document.createElement("button");
                 btn.textContent = text;
                 btn.addEventListener("click", () => {
-                    addMomentComment(m, text, "mention");
+                    addMomentComment(m, text, "mention").catch(err => console.error(err));
                 });
                 mentionWrap.appendChild(btn);
             });
@@ -458,7 +469,25 @@ export function initWeChatApp() {
         pendingRedEnvelope = null;
     }
 
-    function sendChat(textOverride, kindOverride, meta = {}) {
+    function handleIncomingMessage(chat, msg) {
+        if (!chat) return;
+        chat.log.push(msg);
+        chat.preview = formatChatText(msg);
+        chat.time = "刚刚";
+        const active = isChatActive(chat.id);
+        if (!active) {
+            chat.unread = (chat.unread || 0) + 1;
+            notifyChatMessage(chat, msg);
+        }
+        persistChats();
+        if (active) {
+            openChat(chat.id);
+        } else {
+            renderChats();
+        }
+    }
+
+    async function sendChat(textOverride, kindOverride, meta = {}) {
         if (!chatWindow || !chatInput) return;
         const id = chatWindow.dataset.chat;
         const c = chats.find(x => x.id === id);
@@ -481,30 +510,22 @@ export function initWeChatApp() {
         persistChats();
         openChat(id);
         renderChats();
-        setTimeout(() => {
-            const replyMsg = { from:"in", text:"“我听见了。”" };
-            c.log.push(replyMsg);
-            c.preview = "“我听见了。”";
-            c.time = "刚刚";
-            const active = isChatActive(id);
-            if (!active) {
-                c.unread = (c.unread || 0) + 1;
-                notifyChatMessage(c, replyMsg);
-            }
-            persistChats();
-            if (active) {
-                openChat(id);
-            } else {
-                renderChats();
-            }
-        }, 500);
+        try {
+            const aiReply = await askAI(`微信中${c.name}听见了「${text}」，他会怎么回？`);
+            const replyMsg = { from: "in", text: aiReply || "……" };
+            handleIncomingMessage(c, replyMsg);
+        } catch (err) {
+            console.error("AI 微信回复失败", err);
+        }
     }
 
-    if (chatSend) chatSend.addEventListener("click", sendChat);
+    if (chatSend) chatSend.addEventListener("click", () => {
+        sendChat().catch(err => console.error(err));
+    });
     if (chatInput) chatInput.addEventListener("keydown", e => {
         if (e.key === "Enter") {
             e.preventDefault();
-            sendChat();
+            sendChat().catch(err => console.error(err));
         }
     });
     if (chatActionsToggle) {
@@ -533,7 +554,6 @@ export function initWeChatApp() {
             if (currentChatAction.type === "pay") {
                 sendChat(`转账 ¥${formatted}`, "pay", { amount });
                 adjustWallet(-amount);
-                addMemoEntry(`转账 → ¥${formatted}`);
             } else if (currentChatAction.type === "red") {
                 sendChat(`红包 ¥${formatted}`, "red", { amount, redeemed: true });
                 adjustWallet(-amount);
@@ -665,6 +685,15 @@ export function initWeChatApp() {
     renderDial();
     switchCallTab("history");
 
+    weChatRuntime = {
+        chats,
+        moments,
+        handleIncomingMessage,
+        renderChats,
+        renderMoments,
+        persistMoments
+    };
+
     renderChats();
     renderMoments();
     renderWallet();
@@ -703,4 +732,34 @@ export function initWeChatApp() {
             renderCallHistory();
         });
     });
+}
+
+export async function triggerWeChatNotification(reason = "剧情") {
+    if (!weChatRuntime || !weChatRuntime.chats?.length) return;
+    const target = weChatRuntime.chats[Math.floor(Math.random() * weChatRuntime.chats.length)];
+    if (!target) return;
+    try {
+        const aiText = await askAI(`请用${target.name}的语气推送一条微信提醒，缘由：${reason}`);
+        const msg = { from: "in", text: aiText || "……" };
+        weChatRuntime.handleIncomingMessage(target, msg);
+        showPhoneFloatingAlert("微信提醒");
+    } catch (err) {
+        console.error("触发微信通知失败", err);
+    }
+}
+
+export async function triggerMomentsNotification() {
+    if (!weChatRuntime || !weChatRuntime.moments?.length) return;
+    const target = weChatRuntime.moments[Math.floor(Math.random() * weChatRuntime.moments.length)];
+    if (!target) return;
+    try {
+        const aiComment = await askAI(`朋友圈中「${target.text}」，请生成一句神秘评论。`);
+        target.comments = target.comments || [];
+        target.comments.push({ text: aiComment || "……", type: "ai", time: new Date() });
+        weChatRuntime.persistMoments();
+        weChatRuntime.renderMoments();
+        showPhoneFloatingAlert("朋友圈提醒");
+    } catch (err) {
+        console.error("朋友圈触发失败", err);
+    }
 }

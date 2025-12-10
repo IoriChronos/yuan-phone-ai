@@ -11,11 +11,11 @@ function formatMemoTime(date) {
 }
 
 function getMemoList() {
-    return getState("phone.memoLog") || [];
+    return getState("memoLog") || [];
 }
 
 function setMemoList(list) {
-    updateState("phone.memoLog", list);
+    updateState("memoLog", list);
 }
 
 export function renderMemoLog() {

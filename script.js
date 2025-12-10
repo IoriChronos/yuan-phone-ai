@@ -7,10 +7,10 @@ import {
 } from "./ui/phone.js";
 import { initDynamicIsland } from "./ui/dynamic-island.js";
 import { initMemoApp, addMemoEntry } from "./apps/memo.js";
-import { initWeChatApp } from "./apps/wechat.js";
-import { handleIslandCallAction } from "./apps/phone.js";
-import { registerTrigger, checkTriggers } from "./core/triggers.js";
-import { queryAI } from "./core/ai.js";
+import { initWeChatApp, triggerWeChatNotification, triggerMomentsNotification } from "./apps/wechat.js";
+import { handleIslandCallAction, triggerIncomingCall } from "./apps/phone.js";
+import { setTriggerHandlers, checkTriggers } from "./core/triggers.js";
+import { askAI } from "./core/ai.js";
 
 let storyUI = null;
 
@@ -22,19 +22,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     initMemoApp();
     initPhoneUI({
-        onAppOpen: (_, label) => addMemoEntry(`打开 ${label}`)
+        onAppOpen: (id, label) => {
+            const name = label || id;
+            addMemoEntry(`打开 ${name}`);
+            updateState("lastAppOpened", name);
+        }
     });
     initWeChatApp();
+    setTriggerHandlers({
+        wechat: () => triggerWeChatNotification("剧情联动").catch(err => console.error(err)),
+        call: () => triggerIncomingCall("元书 · 来电"),
+        moments: () => triggerMomentsNotification().catch(err => console.error(err)),
+        notify: (label) => playSpecialFloatNotification(`${label} 提醒`)
+    });
 
     storyUI = initAIChatWindow({
         onSubmit: handleStorySubmit
     });
     hydrateStoryLog();
-    registerDefaultTriggers();
 
     window.addEventListener("message", (event) => {
         if (typeof event.data === "string") {
-            checkTriggers(event.data);
+            const maybe = checkTriggers(event.data);
+            if (maybe && typeof maybe.then === "function") {
+                maybe.catch(err => console.error(err));
+            }
         }
     });
 });
@@ -57,19 +69,8 @@ function appendStoryEntry(role, text) {
 async function handleStorySubmit(text) {
     appendStoryEntry("user", text);
     await checkTriggers(text);
-    const aiResult = await queryAI(text);
-    const reply = aiResult?.text || "【占位回复】暂时只是本地假对话。";
-    appendStoryEntry("system", reply);
-}
-
-function registerDefaultTriggers() {
-    registerTrigger("external-special", {
-        match: input => input.trim() === "1",
-        action: () => {
-            playSpecialFloatNotification("剧情通知");
-            return true;
-        }
-    });
+    const reply = await askAI(`剧情输入：${text}`);
+    appendStoryEntry("system", reply || "(AI 无回复)");
 }
 
 function initClock() {

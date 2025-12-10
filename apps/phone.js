@@ -1,11 +1,12 @@
-import { addMemoEntry } from "./memo.js";
 import { getState, updateState } from "../core/state.js";
+import { askAI } from "../core/ai.js";
 import {
     DEFAULT_ISLAND_LABEL,
     setIslandLabel,
     showIslandCallAlert,
     hideIslandCallAlert,
-    triggerIslandNotify
+    triggerIslandNotify,
+    collapseIslandAfterCall
 } from "../ui/dynamic-island.js";
 
 const callOverlayState = {
@@ -13,11 +14,15 @@ const callOverlayState = {
     nameEl: null,
     statusEl: null,
     timerEl: null,
+    transcriptEl: null,
     endBtn: null,
     timerId: null,
     startTime: 0,
     activeName: "",
-    direction: ""
+    direction: "",
+    transcriptLog: [],
+    transcriptTimer: null,
+    historyIndex: null
 };
 
 let islandCallState = null;
@@ -29,6 +34,7 @@ function ensureCallOverlayElements() {
         callOverlayState.nameEl = document.getElementById("in-call-name");
         callOverlayState.statusEl = document.getElementById("in-call-status");
         callOverlayState.timerEl = document.getElementById("in-call-timer");
+        callOverlayState.transcriptEl = document.getElementById("in-call-transcript");
         callOverlayState.endBtn = document.getElementById("in-call-end");
         if (callOverlayState.endBtn) {
             callOverlayState.endBtn.addEventListener("click", () => {
@@ -51,6 +57,14 @@ function pushCallHistory(entry) {
     calls.unshift(entry);
     if (calls.length > 50) calls.length = 50;
     updateState("phone.calls", calls);
+    return 0;
+}
+
+function updateCallHistory(index, patch = {}) {
+    const calls = (getState("phone.calls") || []).slice();
+    if (!calls[index]) return;
+    calls[index] = { ...calls[index], ...patch };
+    updateState("phone.calls", calls);
 }
 
 export function startCallSession(name, direction = "incoming") {
@@ -59,6 +73,17 @@ export function startCallSession(name, direction = "incoming") {
     if (!callOverlayState.container) return;
     callOverlayState.activeName = name;
     callOverlayState.direction = direction;
+    callOverlayState.transcriptLog = [];
+    if (callOverlayState.transcriptEl) {
+        callOverlayState.transcriptEl.innerHTML = "";
+    }
+    const historyIndex = typeof islandCallState?.historyIndex === "number"
+        ? islandCallState.historyIndex
+        : callOverlayState.historyIndex;
+    callOverlayState.historyIndex = historyIndex != null ? historyIndex : pushCallHistory({ name, time: "刚刚", note: direction === "incoming" ? "来电" : "去电" });
+    if (callOverlayState.historyIndex != null) {
+        updateCallHistory(callOverlayState.historyIndex, { note: direction === "incoming" ? "来电 · 通话中" : "去电 · 通话中" });
+    }
     if (callOverlayState.nameEl) callOverlayState.nameEl.textContent = name;
     if (callOverlayState.statusEl) {
         callOverlayState.statusEl.textContent = direction === "incoming" ? "来电 · 通话中" : "呼出 · 通话中";
@@ -69,6 +94,7 @@ export function startCallSession(name, direction = "incoming") {
     if (callOverlayState.timerId) clearInterval(callOverlayState.timerId);
     callOverlayState.timerId = setInterval(updateCallTimerDisplay, 1000);
     setIslandLabel(`${name} · 通话中`);
+    startTranscriptLoop(name);
 }
 
 export function endCallSession(reason = "结束通话") {
@@ -79,31 +105,38 @@ export function endCallSession(reason = "结束通话") {
         clearInterval(callOverlayState.timerId);
         callOverlayState.timerId = null;
     }
+    stopTranscriptLoop();
     callOverlayState.startTime = 0;
-    if (callOverlayState.activeName) {
-        addMemoEntry(`${reason} · ${callOverlayState.activeName}`);
+    if (callOverlayState.historyIndex != null) {
+        updateCallHistory(callOverlayState.historyIndex, {
+            note: reason,
+            transcript: callOverlayState.transcriptLog || []
+        });
     }
     callOverlayState.activeName = "";
     callOverlayState.direction = "";
+    callOverlayState.historyIndex = null;
+    callOverlayState.transcriptLog = [];
     setIslandLabel(DEFAULT_ISLAND_LABEL);
+    collapseIslandAfterCall();
 }
 
 export function handleIslandCallAction(action) {
     if (!islandCallState) return;
     const name = islandCallState.name;
     if (action === "accept") {
-        addMemoEntry(`接听来电 ← ${name}`);
         startCallSession(name, "incoming");
-        islandCallState = null;
     } else if (action === "decline") {
-        addMemoEntry(`拒绝来电 ← ${name}`);
         const shouldRetry = islandCallState.retry;
-        islandCallState = null;
+        if (typeof islandCallState.historyIndex === "number") {
+            updateCallHistory(islandCallState.historyIndex, { note: "拒接" });
+        }
         hideIslandCallAlert();
         if (shouldRetry) {
             scheduleCallRetry(name);
         }
     }
+    islandCallState = null;
 }
 
 function scheduleCallRetry(name, delay = 3000) {
@@ -114,17 +147,47 @@ function scheduleCallRetry(name, delay = 3000) {
 }
 
 export function triggerIncomingCall(name = "未知来电", retry = true) {
-    pushCallHistory({ name, time: "刚刚", note: "来电" });
+    const index = pushCallHistory({ name, time: "刚刚", note: "来电" });
     showIslandCallAlert(name);
     triggerIslandNotify(`来电：${name}`);
-    addMemoEntry(`来电 ← ${name}`);
-    islandCallState = { name, retry };
+    islandCallState = { name, retry, historyIndex: index };
     setIslandLabel(name);
 }
 
 export function triggerOutgoingCall(name = "未知线路") {
-    pushCallHistory({ name, time: "刚刚", note: "去电" });
-    addMemoEntry(`呼出 → ${name}`);
+    callOverlayState.historyIndex = pushCallHistory({ name, time: "刚刚", note: "去电" });
     triggerIslandNotify(`呼出：${name}`);
     startCallSession(name, "outgoing");
+}
+function appendTranscriptLine(text, role = "npc") {
+    if (!callOverlayState.transcriptEl) return;
+    callOverlayState.transcriptLog = callOverlayState.transcriptLog || [];
+    callOverlayState.transcriptLog.push({ role, text });
+    const row = document.createElement("div");
+    row.className = `transcript-row ${role}`;
+    row.textContent = text;
+    callOverlayState.transcriptEl.appendChild(row);
+    callOverlayState.transcriptEl.scrollTop = callOverlayState.transcriptEl.scrollHeight;
+}
+
+function stopTranscriptLoop() {
+    if (callOverlayState.transcriptTimer) {
+        clearTimeout(callOverlayState.transcriptTimer);
+        callOverlayState.transcriptTimer = null;
+    }
+}
+
+function startTranscriptLoop(name) {
+    stopTranscriptLoop();
+    const pump = async () => {
+        if (!callOverlayState.activeName) return;
+        try {
+            const line = await askAI(`通话转写：${name} 正在说什么？`);
+            if (line) appendTranscriptLine(line, "npc");
+        } catch (err) {
+            console.error("通话转写失败", err);
+        }
+        callOverlayState.transcriptTimer = setTimeout(pump, 2000);
+    };
+    pump();
 }

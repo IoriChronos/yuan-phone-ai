@@ -654,6 +654,9 @@ body.mobile-mode #app {
     animation: islandUnlock 0.8s cubic-bezier(.34,1.56,.64,1) forwards;
     overflow: visible;
 }
+#dynamic-island.pop {
+    animation: islandPop 0.7s ease forwards;
+}
 #dynamic-island.unlocking .island-content { opacity: 0; }
 #dynamic-island .unlock-ring,
 #dynamic-island .unlock-face,
@@ -689,10 +692,34 @@ body.mobile-mode #app {
 #dynamic-island.notify {
     animation: islandNotify 0.6s ease forwards;
 }
+#dynamic-island .island-bubble {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translate(-50%, 10px);
+    background: rgba(12, 12, 17, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    padding: 4px 10px;
+    color: #fff;
+    font-size: 11px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#dynamic-island .island-bubble.show {
+    opacity: 1;
+    transform: translate(-50%, -2px);
+}
 @keyframes islandNotify {
     0% { transform: translateX(-50%) scale(1); box-shadow: 0 6px 14px rgba(0,0,0,0.4); }
     35% { transform: translateX(-50%) scale(1.06); box-shadow: 0 10px 20px rgba(0,0,0,0.5),0 0 0 6px rgba(244,182,196,0.25); }
     100% { transform: translateX(-50%) scale(1); box-shadow: 0 6px 14px rgba(0,0,0,0.4); }
+}
+@keyframes islandPop {
+    0% { transform: translateX(-50%) scale(1); }
+    40% { transform: translateX(-50%) scale(1.06); }
+    100% { transform: translateX(-50%) scale(1); }
 }
 
 @keyframes islandUnlock {
@@ -1693,6 +1720,32 @@ body.mobile-mode #app {
 .in-call-timer {
     font-size: 24px;
     letter-spacing: 0.08em;
+}
+.in-call-transcript {
+    width: 100%;
+    max-height: 140px;
+    overflow-y: auto;
+    border-radius: 18px;
+    padding: 10px;
+    background: rgba(255,255,255,0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.transcript-row {
+    font-size: 12px;
+    text-align: left;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+}
+.transcript-row.user {
+    align-self: flex-end;
+    background: rgba(178, 255, 205, 0.12);
+}
+.transcript-row.npc {
+    align-self: flex-start;
+    background: rgba(255, 255, 255, 0.08);
 }
 #in-call-end {
     width: 100%;

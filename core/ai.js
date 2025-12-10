@@ -1,90 +1,29 @@
-import { getState } from "./state.js";
-import { CONFIG } from "../config.js";
+import { AI_CONFIG } from "../config.js";
+import { GameState } from "./state.js";
 
-function collectRecentChats(limit = 3) {
-    const chats = getState("phone.chats") || {};
-    const merged = [];
-    Object.values(chats).forEach((chat) => {
-        const lastLog = chat.log ? chat.log.slice(-limit) : [];
-        lastLog.forEach(msg => {
-            merged.push({
-                chat: chat.name,
-                role: msg.from === "out" ? "user" : "npc",
-                text: msg.text || msg.kind || "",
-                kind: msg.kind || "text"
-            });
-        });
-    });
-    return merged.slice(-limit);
-}
-
-function collectStory(limit = 6) {
-    const story = getState("story") || [];
-    return story.slice(-limit);
-}
-
-function collectMoments(limit = 2) {
-    const moments = getState("phone.moments") || [];
-    return moments.slice(-limit);
-}
-
-function collectCalls(limit = 3) {
-    const calls = getState("phone.calls") || [];
-    return calls.slice(-limit);
-}
-
-export function buildCompactContext() {
-    const wallet = getState("phone.wallet") || {};
-    const unreadByApp = getState("phone.unreadByApp") || {};
-    const unreadTotal = getState("phone.unreadTotal") || 0;
-    return {
-        story: collectStory(6),
-        chats: collectRecentChats(3),
-        walletBalance: wallet.balance || 0,
-        calls: collectCalls(3),
-        moments: collectMoments(2),
-        unread: {
-            total: unreadTotal,
-            byApp: unreadByApp
-        }
-    };
-}
-
-export async function queryAI(userInput) {
-    const context = buildCompactContext();
-    const systemPrompt = CONFIG.prompt || "You are Yuan's lightweight AI.";
+export async function askAI(text) {
     const payload = {
-        model: CONFIG.MODEL || "mock",
-        prompt: `${systemPrompt}\n\nCurrent world-state:\n${JSON.stringify(context)}\n\nUser:${userInput}`
+        model: AI_CONFIG.model,
+        messages: [
+            { role: "system", content: AI_CONFIG.systemPrompt },
+            { role: "user", content: GameState.asContext() },
+            { role: "user", content: text }
+        ]
     };
-    if (!CONFIG.API_URL) {
-        return {
-            text: "【占位】AI 接口未配置，当前仅返回本地示例。",
-            payload,
-            context
-        };
-    }
+
     try {
-        const response = await fetch(CONFIG.API_URL, {
+        const res = await fetch(AI_CONFIG.apiBase, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                ...(CONFIG.API_KEY ? { "Authorization": `Bearer ${CONFIG.API_KEY}` } : {})
+                "Authorization": `Bearer ${AI_CONFIG.apiKey}`
             },
             body: JSON.stringify(payload)
         });
-        const data = await response.json();
-        return {
-            text: data?.reply ?? data?.text ?? JSON.stringify(data),
-            payload,
-            context
-        };
+        const json = await res.json();
+        return json.choices?.[0]?.message?.content ?? "【本地】信号被黑雾遮蔽，他暂时沉默。";
     } catch (err) {
-        console.error("AI request failed:", err);
-        return {
-            text: "【错误】AI 请求失败。",
-            payload,
-            context
-        };
+        console.error("AI 调用失败", err);
+        return "【本地】信号被黑雾遮蔽，他暂时沉默。";
     }
 }

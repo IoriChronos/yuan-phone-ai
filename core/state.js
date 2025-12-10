@@ -50,39 +50,97 @@ const initialChats = () => ([
 ]);
 
 const initialMoments = () => ([
-    { who: "你", text: "今天只是想确认一件事：你有没有在看我。", time: "刚刚", likes: 23, likedByUser: false, comments: [] },
-    { who: "未知信号", text: "今晚的城很安静，像在等一场失控。", time: "1 小时前", likes: 9, likedByUser: false, comments: [] },
-    { who: "甜品店老板", text: "提前留了三盒奶油泡芙，希望他别发火。", time: "2 小时前", likes: 12, likedByUser: false, comments: [] }
+    { id: "m1", who: "你", text: "今天只是想确认一件事：你有没有在看我。", time: "刚刚", likes: 23, likedByUser: false, comments: [] },
+    { id: "m2", who: "未知信号", text: "今晚的城很安静，像在等一场失控。", time: "1 小时前", likes: 9, likedByUser: false, comments: [] },
+    { id: "m3", who: "甜品店老板", text: "提前留了三盒奶油泡芙，希望他别发火。", time: "2 小时前", likes: 12, likedByUser: false, comments: [] }
 ]);
 
-const initialCalls = () => ([
+const initialCallHistory = () => ([
     { name: "未知来电", time: "刚刚", note: "00:42" },
     { name: "室友", time: "昨天", note: "01:10" },
     { name: "未知号码", time: "前天", note: "未接" }
 ]);
 
+const initialWalletEvents = () => ([
+    { type: "income", source: "元书", amount: 1314.0, time: Date.now() - 3600 * 1000 },
+    { type: "balance", amount: 2180.0, time: Date.now() }
+]);
+
+const initialContacts = [
+    { id: "yuan", name: "元书", tel: "未知线路" },
+    { id: "room", name: "室友", tel: "131****8888" },
+    { id: "shadow", name: "未知 · 留影", tel: "000-000" },
+    { id: "sys", name: "系统通告", tel: "系统广播" }
+];
+
+function computeChatPreview(chat) {
+    if (!chat || !chat.log || !chat.log.length) return "";
+    const last = chat.log[chat.log.length - 1];
+    if (last.text) return last.text;
+    if (last.kind === "pay") return `转账 ¥${(last.amount || 0).toFixed(2)}`;
+    if (last.kind === "red") {
+        return `${last.redeemed ? "已收红包" : "红包"} ¥${(last.amount || 0).toFixed(2)}`;
+    }
+    return "";
+}
+
 const unreadOfChats = (chats) => (chats || []).reduce((sum, chat) => sum + (chat.unread || 0), 0);
+
+function latestBalance(events = []) {
+    for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === "balance") return events[i].amount || 0;
+    }
+    return 0;
+}
+
+function latestIncome(events = []) {
+    for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === "income") return { source: events[i].source, amount: events[i].amount };
+    }
+    return { source: "", amount: 0 };
+}
 
 export const GameState = {
     story: [
         { role: "system", text: "主线从这里开始。你可以先随便说几句，之后我们再把它接到 AI 上。" }
     ],
-    phone: {
-        unreadByApp: { wechat: 0 },
-        unreadTotal: 0,
-        chats: initialChats(),
-        moments: initialMoments(),
-        calls: initialCalls(),
-        wallet: {
-            balance: 2180.0,
-            lastIncome: { from: "元书", amount: 1314.0 }
-        },
-        memoLog: []
+    contacts: initialContacts,
+    chats: initialChats(),
+    callHistory: initialCallHistory(),
+    walletEvents: initialWalletEvents(),
+    moments: initialMoments(),
+    triggers: [],
+    memoLog: [],
+    unread: { total: 0, byApp: { wechat: 0, phone: 0 } },
+    lastAppOpened: "home",
+    asContext() {
+        const summary = {
+            lastAppOpened: this.lastAppOpened,
+            unread: this.unread,
+            story: this.story.slice(-6),
+            contacts: this.contacts,
+            chats: this.chats.map(chat => ({
+                id: chat.id,
+                name: chat.name,
+                unread: chat.unread,
+                preview: computeChatPreview(chat),
+                lastMessages: chat.log.slice(-3)
+            })),
+            callHistory: this.callHistory.slice(0, 5),
+            walletEvents: this.walletEvents.slice(-5),
+            moments: this.moments.slice(-3),
+            triggers: this.triggers.slice(-5)
+        };
+        return JSON.stringify(summary);
     }
 };
 
-GameState.phone.unreadByApp.wechat = unreadOfChats(GameState.phone.chats);
-GameState.phone.unreadTotal = GameState.phone.unreadByApp.wechat;
+function refreshUnread() {
+    const totalWechat = unreadOfChats(GameState.chats);
+    GameState.unread.byApp.wechat = totalWechat;
+    GameState.unread.total = totalWechat + (GameState.unread.byApp.phone || 0);
+}
+refreshUnread();
 
 const stateListeners = new Set();
 
@@ -115,6 +173,10 @@ function resolvePath(path, { createMissing = false } = {}) {
 }
 
 function notifyStateChange(path, value) {
+    const normalized = path.startsWith("phone.") ? path.slice("phone.".length) : path;
+    if (normalized.startsWith("chats")) {
+        refreshUnread();
+    }
     stateListeners.forEach((listener) => {
         try {
             listener(path, value, GameState);
@@ -156,3 +218,57 @@ export function subscribeState(listener) {
     stateListeners.add(listener);
     return () => stateListeners.delete(listener);
 }
+
+const phoneProxy = {};
+Object.defineProperties(phoneProxy, {
+    unreadByApp: {
+        get() { return GameState.unread.byApp; },
+        set(val) { GameState.unread.byApp = val; }
+    },
+    unreadTotal: {
+        get() { return GameState.unread.total; },
+        set(val) { GameState.unread.total = val; }
+    },
+    chats: {
+        get() { return GameState.chats; },
+        set(val) { GameState.chats = val; refreshUnread(); }
+    },
+    moments: {
+        get() { return GameState.moments; },
+        set(val) { GameState.moments = val; }
+    },
+    calls: {
+        get() { return GameState.callHistory; },
+        set(val) { GameState.callHistory = val; }
+    },
+    wallet: {
+        get() {
+            const events = GameState.walletEvents || [];
+            return {
+                balance: latestBalance(events),
+                lastIncome: latestIncome(events)
+            };
+        },
+        set(val = {}) {
+            const events = (GameState.walletEvents || []).slice();
+            if (typeof val.balance === "number") {
+                events.push({ type: "balance", amount: val.balance, time: Date.now() });
+            }
+            if (val.lastIncome) {
+                events.push({
+                    type: "income",
+                    amount: val.lastIncome.amount || 0,
+                    source: val.lastIncome.source || "未知",
+                    time: Date.now()
+                });
+            }
+            GameState.walletEvents = events;
+        }
+    },
+    memoLog: {
+        get() { return GameState.memoLog; },
+        set(val) { GameState.memoLog = val; }
+    }
+});
+
+GameState.phone = phoneProxy;
