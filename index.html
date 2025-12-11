@@ -37,23 +37,50 @@
                     <span class="tool-bar bottom"></span>
                 </button>
                 <div id="story-tools-menu" class="story-tools-menu" aria-hidden="true">
-                    <button id="story-tool-system">
-                        <span class="icon-system"></span>
-                        <span>System Prompt</span>
-                    </button>
-                    <button id="story-tool-restart">
-                        <span class="icon-restart"></span>
-                        <span>Restart</span>
-                    </button>
-                    <div class="provider-control">
-                        <span>Provider</span>
-                        <select id="ai-provider-select"></select>
+                    <div class="menu-group menu-primary">
+                        <div class="menu-head">常用操作</div>
+                        <div class="menu-row">
+                            <button id="story-tool-system">
+                                <span class="icon-system"></span>
+                                <span>System Prompt</span>
+                            </button>
+                        </div>
+                        <div class="menu-row">
+                            <label class="text-size-control">
+                                <span class="text-size-label">Text Size</span>
+                                <input id="story-font-slider" type="range" min="12" max="18" value="13">
+                                <span id="story-font-value">13px</span>
+                            </label>
+                        </div>
                     </div>
-                    <label class="memory-limit-control">
-                        <span class="memory-label">Long Memory</span>
-                        <input id="long-memory-slider" type="range" min="1" max="12" value="3">
-                        <span id="long-memory-value" class="memory-value">3</span>
-                    </label>
+                    <div class="menu-divider" aria-hidden="true"></div>
+                    <div class="menu-group menu-secondary">
+                        <div class="menu-head">重启</div>
+                        <div class="menu-row">
+                            <button id="story-tool-restart">
+                                <span class="icon-restart"></span>
+                                <span>Restart</span>
+                            </button>
+                        </div>
+                        <div class="menu-hint">Story / Phone / All</div>
+                    </div>
+                    <div class="menu-divider" aria-hidden="true"></div>
+                    <div class="menu-group menu-tertiary">
+                        <div class="menu-head">高级联动</div>
+                        <div class="menu-row">
+                            <div class="provider-control">
+                                <span>Provider</span>
+                                <select id="ai-provider-select"></select>
+                            </div>
+                        </div>
+                        <div class="menu-row">
+                            <label class="memory-limit-control">
+                                <span class="memory-label">Long Memory</span>
+                                <input id="long-memory-slider" type="range" min="1" max="12" value="3">
+                                <span id="long-memory-value" class="memory-value">3</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
             </div>
             <button id="story-send" class="click-anim" >发送</button>
@@ -154,6 +181,7 @@
                         <button class="back-home">‹</button>
                         <div class="chat-window-head" id="chat-head-controls" style="display:none;">
                             <button id="chat-back" aria-label="返回">‹</button>
+                            <button id="chat-recall-btn" class="chat-recall-btn" aria-label="撤回上一条" style="display:none;">撤回</button>
                             <span class="chat-unread-total" id="chat-unread-total" style="display:none;"></span>
                         </div>
                         <div class="wechat-top" id="wechat-top">Wechat (3)</div>

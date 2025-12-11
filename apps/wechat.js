@@ -10,8 +10,10 @@ import {
     incrementMomentsUnread,
     clearMomentsUnread,
     sendMessage as sendWeChatMessage,
+    withdrawChatMessage,
     markChatRead as worldMarkChatRead,
     postMoment as worldPostMoment,
+    deleteMoment,
     likeMoment as worldLikeMoment,
     commentMoment as worldCommentMoment,
     sendTransfer as walletSendTransfer,
@@ -34,6 +36,7 @@ export function initWeChatApp() {
     };
     const chatWindow = document.getElementById("wechat-chat-window");
     const chatHeadControls = document.getElementById("chat-head-controls");
+    const chatRecallBtn = document.getElementById("chat-recall-btn");
     const chatLog = document.getElementById("wechat-chat-log");
     const chatInput = document.getElementById("wechat-chat-input");
     const chatSend = document.getElementById("wechat-chat-send");
@@ -414,6 +417,12 @@ export function initWeChatApp() {
         }
     }
 
+    function updateChatRecallControl(chat) {
+        if (!chatRecallBtn) return;
+        const hasOutgoing = chat && Array.isArray(chat.log) && chat.log.some(m => m.from === "out");
+        chatRecallBtn.style.display = hasOutgoing ? "inline-flex" : "none";
+    }
+
     function renderMoments() {
         const wrap = momentsFeed;
         if (!wrap) return;
@@ -481,6 +490,7 @@ export function initWeChatApp() {
             div.appendChild(commentPanel);
             const commentBtn = div.querySelector('[data-act="comment"]');
             const mentionBtn = div.querySelector('[data-act="mention"]');
+            const actionsEl = div.querySelector(".moment-actions");
             const togglePanel = (show) => {
                 const next = typeof show === "boolean" ? show : !commentPanel.classList.contains("show");
                 commentPanel.classList.toggle("show", next);
@@ -512,6 +522,20 @@ export function initWeChatApp() {
                     authorId: PLAYER_ID
                 }).catch(err => console.error(err));
             });
+            if (m.authorId === PLAYER_ID && actionsEl) {
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "button";
+                deleteBtn.className = "delete";
+                deleteBtn.textContent = "删除";
+                deleteBtn.addEventListener("click", () => {
+                    const confirmed = window.confirm("确认删除这条朋友圈？");
+                    if (!confirmed) return;
+                    deleteMoment(m.id);
+                    renderMoments();
+                    showPhoneFloatingAlert("朋友圈", "删除了一条动态");
+                });
+                actionsEl.appendChild(deleteBtn);
+            }
             if (m.comments && m.comments.length) {
                 const commentsBlock = document.createElement("div");
                 commentsBlock.className = "moment-comments";
@@ -644,6 +668,7 @@ export function initWeChatApp() {
         if (wechatBottom) wechatBottom.style.display = "none";
         if (wechatTop) wechatTop.textContent = c.name;
         if (chatHeadControls) chatHeadControls.style.display = "flex";
+        updateChatRecallControl(c);
         renderChats();
     }
 
@@ -864,7 +889,21 @@ export function initWeChatApp() {
         const top = document.getElementById("wechat-top");
         if (top) top.textContent = `Wechat (${totalUnreadCount()})`;
         hideMessageBanner();
+        if (chatRecallBtn) chatRecallBtn.style.display = "none";
     });
+
+    if (chatRecallBtn) {
+        chatRecallBtn.addEventListener("click", () => {
+            const activeId = chatWindow?.dataset?.chat;
+            if (!activeId) return;
+            const removed = withdrawChatMessage(activeId);
+            if (removed) {
+                showMessageBanner("微信", "你撤回了一条消息。", activeId);
+                renderChats();
+                openChat(activeId);
+            }
+        });
+    }
 
     /* 电话页：记录/联系人/拨号 */
     const callTabs = document.querySelectorAll('[data-ctab]');
@@ -955,9 +994,18 @@ export function initWeChatApp() {
             case "chats:read":
                 renderChats();
                 break;
+            case "chats:withdraw":
+                renderChats();
+                if (chatWindow && chatWindow.dataset.chat === detail?.chatId) {
+                    openChat(detail.chatId);
+                }
+                break;
             case "moments:post":
             case "moments:comment":
             case "moments:like":
+                renderMoments();
+                break;
+            case "moments:delete":
                 renderMoments();
                 break;
         }

@@ -142,9 +142,6 @@ export function renderStoryBubble(entry, options = {}) {
     if (renderAsBubble && sceneFX) {
         fxHandle = sceneFX.attachToBubble?.(node, meta);
         sceneFX.applyAutomatic?.(fxHandle, meta, entry.role);
-        decorateBubble(node, meta);
-    } else if (renderAsBubble) {
-        decorateBubble(node, meta);
     }
 
     node.dataset.storyType = meta.type || "text";
@@ -407,29 +404,6 @@ function applyParagraphStyles(text = "", classes = []) {
     });
 }
 
-function decorateBubble(bubble, meta) {
-    if (!bubble || (meta?.type !== "narration" && meta?.type !== "dialogue")) return;
-    bubble.querySelectorAll(":scope > .bubble-cutout").forEach(node => node.remove());
-    const count = meta.type === "dialogue"
-        ? (Math.random() > 0.7 ? 1 : 0)
-        : (Math.random() > 0.4 ? 1 : 2);
-    if (count <= 0) return;
-    for (let i = 0; i < count; i++) {
-        const cut = document.createElement("span");
-        cut.className = "bubble-cutout";
-        if (Math.random() > 0.6) {
-            cut.classList.add("ring");
-        }
-        const size = 32 + Math.random() * 48;
-        const left = 10 + Math.random() * 70;
-        const top = 5 + Math.random() * 50;
-        cut.style.setProperty("--cut-size", `${size}px`);
-        cut.style.setProperty("--cut-left", `${left}%`);
-        cut.style.setProperty("--cut-top", `${top}%`);
-        bubble.appendChild(cut);
-    }
-}
-
 function shouldRenderBareNarration(meta = {}) {
     if (!meta.cleanText) return false;
     const totalLines = meta.lineCount || meta.cleanText.split(/\n/).length;
@@ -459,51 +433,62 @@ function normalizeSpacingType(type) {
 
 const SPACING_MATRIX = {
     narration: {
-        narration: 6,
-        action: 14,
-        thought: 18,
-        dialogue: 16,
+        narration: 12,
+        action: 6,
+        thought: 8,
+        dialogue: 7,
         system: 16,
-        other: 14
+        other: 7
     },
     action: {
-        action: 8,
-        narration: 12,
-        thought: 20,
-        dialogue: 14,
+        action: 5,
+        narration: 7,
+        thought: 9,
+        dialogue: 6,
         system: 16,
-        other: 14
+        other: 6
     },
     dialogue: {
-        dialogue: 10,
-        action: 16,
-        narration: 14,
-        thought: 18,
+        dialogue: 5,
+        action: 7,
+        narration: 7,
+        thought: 8,
         system: 16,
-        other: 14
+        other: 6
     }
 };
 
 function baseSpacing(prevType, currentType) {
     const normalizedPrev = normalizeSpacingType(prevType);
     const normalizedCurrent = normalizeSpacingType(currentType);
-    if (!normalizedPrev) return normalizedCurrent === "thought" ? 26 : 18;
+    if (normalizedPrev === "system" || normalizedCurrent === "system") return 16;
+    if (!normalizedPrev) {
+        const fallback = SPACING_MATRIX.narration;
+        if (normalizedCurrent === "thought") return 26;
+        return fallback[normalizedCurrent] ?? fallback.other;
+    }
     if (normalizedPrev === "thought") return 30;
     if (normalizedCurrent === "thought") return 26;
-    const table = SPACING_MATRIX[normalizedPrev];
-    if (table) {
-        const key = table[normalizedCurrent] != null ? normalizedCurrent : "other";
-        if (table[key] != null) return table[key];
-    }
-    return 14;
+    const table = SPACING_MATRIX[normalizedPrev] || SPACING_MATRIX.narration;
+    const key = table[normalizedCurrent] != null ? normalizedCurrent : "other";
+    return table[key] ?? table.other;
 }
 
 export function computeBubbleSpacing(prevType, currentType, variant) {
-    let marginTop = baseSpacing(prevType, currentType);
+    const base = baseSpacing(prevType, currentType);
+    let marginTop = base;
+    let marginBottom = base;
     const normalizedCurrent = normalizeSpacingType(currentType);
     if (normalizedCurrent === "thought") {
         marginTop = Math.max(marginTop, 26);
+        marginBottom = Math.max(marginBottom, 26);
     }
-    const marginBottom = normalizedCurrent === "thought" ? 12 : 6;
+    if (variant === "whisper-dark") {
+        marginTop += 6;
+        marginBottom += 6;
+    } else if (variant === "intim") {
+        marginTop += 4;
+        marginBottom += 4;
+    }
     return { marginTop, marginBottom };
 }

@@ -8,6 +8,7 @@
     --accent-soft: rgba(244, 182, 196, 0.18);
     --text-main: #f6f3f7;
     --text-sub: rgba(244, 243, 247, 0.72);
+    --story-font-size: 13px;
 }
 
 * {
@@ -125,29 +126,53 @@ body.mobile-mode #app {
 .story-bubble {
     position: relative;
     margin: 0;
-    padding: 12px 18px;
+    padding: 14px 20px;
     border-radius: 26px;
-    font-size: 13px;
-    line-height: 1.4;
+    font-size: var(--story-font-size, 13px);
+    line-height: 1.45;
     width: auto;
     max-width: 88%;
-    border: none;
     min-width: fit-content;
-    background:
-        radial-gradient(circle at 10% 20%, rgba(255,160,200,0.08), transparent 60%),
-        radial-gradient(circle at 80% 60%, rgba(140,140,255,0.05), transparent 65%),
-        linear-gradient(150deg, rgba(15,10,16,0.96), rgba(20,12,18,0.7));
-    box-shadow: 0 0 28px rgba(0,0,0,0.25);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: linear-gradient(140deg, rgba(24, 10, 18, 0.95), rgba(12, 6, 14, 0.88));
+    box-shadow:
+        0 18px 30px rgba(0, 0, 0, 0.55),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     white-space: normal;
     word-break: break-word;
     overflow-wrap: break-word;
     align-self: flex-start;
     display: inline-block;
     z-index: 1;
-    overflow: visible;
     isolation: isolate;
+    overflow: visible;
+}
+
+.story-bubble::before,
+.story-bubble::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0.25;
+}
+.story-bubble::before {
+    width: 60px;
+    height: 60px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 70%);
+    top: -12px;
+    right: -18px;
+}
+.story-bubble::after {
+    width: 110px;
+    height: 110px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: radial-gradient(circle, transparent 60%, rgba(255, 255, 255, 0.06));
+    bottom: -28px;
+    left: -8px;
 }
 
 .story-bubble.bubble-center {
@@ -157,7 +182,7 @@ body.mobile-mode #app {
 
 .story-bubble .bubble-content {
     position: relative;
-    z-index: 4;
+    z-index: 2;
     white-space: normal;
     word-break: break-word;
     overflow-wrap: break-word;
@@ -165,15 +190,17 @@ body.mobile-mode #app {
 
 .story-bubble.bubble-user {
     align-self: flex-end;
-    background: linear-gradient(135deg, rgba(50,25,35,0.95), rgba(25,12,20,0.7));
-    color: #fef8ff;
+    background: linear-gradient(145deg, rgba(40, 18, 28, 0.96), rgba(18, 9, 18, 0.9));
+    color: #fdf7ff;
     text-align: right;
-    box-shadow: 0 0 30px rgba(255,160,190,0.18);
+    box-shadow:
+        0 12px 25px rgba(255, 160, 190, 0.2),
+        inset 0 0 12px rgba(255, 255, 255, 0.05);
 }
 
 .story-bubble.bubble-assistant {
     align-self: flex-start;
-    color: #f7f4fa;
+    color: #f9f6fb;
     text-align: left;
 }
 
@@ -188,12 +215,10 @@ body.mobile-mode #app {
 }
 
 .story-bubble.bubble-thought {
-    max-width: 70%;
-    color: #f2d4ff;
-    background:
-        radial-gradient(circle at 20% 20%, rgba(150,80,200,0.18), transparent 70%),
-        linear-gradient(150deg, rgba(32,10,40,0.85), rgba(12,6,18,0.75));
-    box-shadow: 0 15px 35px rgba(110,40,150,0.25);
+    max-width: 74%;
+    color: #f4e4ff;
+    background: linear-gradient(145deg, rgba(30, 12, 38, 0.92), rgba(12, 6, 18, 0.8));
+    box-shadow: 0 20px 40px rgba(90, 30, 130, 0.35);
     position: relative;
 }
 
@@ -213,15 +238,21 @@ body.mobile-mode #app {
 }
 
 .story-bubble.bubble-narration {
-    max-width: 80%;
+    max-width: 82%;
     color: #ffe5d6;
-    background:
-        radial-gradient(circle at 15% 30%, rgba(255,190,205,0.08), transparent 55%),
-        radial-gradient(circle at 80% 60%, rgba(70,20,40,0.25), transparent 65%),
-        linear-gradient(135deg, rgba(28,12,20,0.92), rgba(8,4,10,0.78));
-    border: 1px solid rgba(255,255,255,0.05);
-    align-self: flex-start;
+    background: linear-gradient(150deg, rgba(20, 10, 20, 0.92), rgba(10, 4, 12, 0.78));
+    border: 1px solid rgba(255, 255, 255, 0.05);
     text-align: left;
+}
+
+.story-bubble.bubble-narration::after {
+    bottom: -24px;
+    left: 10px;
+    width: 90px;
+    height: 90px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    opacity: 0.3;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.04);
 }
 
 .story-bubble.bubble-narration + .story-bubble.bubble-narration {
@@ -229,8 +260,8 @@ body.mobile-mode #app {
 }
 
 .story-bubble.bubble-system-input {
-    border: 1px dashed rgba(255,200,210,0.25);
-    box-shadow: 0 0 24px rgba(255,150,190,0.18);
+    border: 1px dashed rgba(255, 200, 210, 0.25);
+    box-shadow: 0 0 24px rgba(255, 150, 190, 0.18);
 }
 
 .bubble-system-chip {
@@ -239,7 +270,7 @@ body.mobile-mode #app {
     left: 18px;
     font-size: 10px;
     letter-spacing: 0.18em;
-    color: rgba(255,220,240,0.8);
+    color: rgba(255, 220, 240, 0.8);
     text-transform: uppercase;
     z-index: 5;
 }
@@ -251,8 +282,10 @@ body.mobile-mode #app {
 
 .story-bubble.bubble-action {
     color: #ffe1e1;
-    background: linear-gradient(145deg, rgba(70,10,24,0.95), rgba(35,6,18,0.8));
-    box-shadow: 0 12px 32px rgba(120,30,50,0.3);
+    background: linear-gradient(145deg, rgba(50, 8, 18, 0.95), rgba(16, 6, 14, 0.85));
+    box-shadow:
+        0 12px 32px rgba(120, 30, 50, 0.3),
+        inset 0 0 30px rgba(255, 120, 140, 0.08);
 }
 
 .story-bubble.dialogue {
@@ -261,11 +294,11 @@ body.mobile-mode #app {
     padding: 12px 20px;
     line-height: 1.55;
     color: #f7f4ff;
-    background: rgba(15,12,18,0.72);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(12, 10, 16, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
-        0 0 10px rgba(80,130,255,0.12),
-        inset 0 0 6px rgba(255,255,255,0.04);
+        0 0 10px rgba(80, 130, 255, 0.12),
+        inset 0 0 6px rgba(255, 255, 255, 0.04);
     text-align: left;
 }
 
@@ -280,18 +313,43 @@ body.mobile-mode #app {
 
 .story-bubble.dialogue-normal {
     background:
-        radial-gradient(circle at 30% 20%, rgba(140,100,160,0.12), transparent 60%),
-        linear-gradient(140deg, rgba(18,10,24,0.85), rgba(6,4,12,0.7));
+        radial-gradient(circle at 30% 20%, rgba(140, 100, 160, 0.12), transparent 60%),
+        linear-gradient(140deg, rgba(18, 10, 24, 0.85), rgba(6, 4, 12, 0.7));
 }
 
 .story-bubble.dialogue-whisper-dark {
     padding-top: 18px;
     padding-bottom: 18px;
+    box-shadow:
+        0 14px 32px rgba(8, 10, 18, 0.8),
+        inset 0 0 18px rgba(152, 196, 255, 0.15);
 }
 
 .story-bubble.dialogue-intim {
     padding-top: 16px;
     padding-bottom: 16px;
+    background:
+        linear-gradient(145deg, rgba(16, 8, 18, 0.92), rgba(40, 12, 14, 0.85)),
+        radial-gradient(circle at 70% 40%, rgba(255, 210, 170, 0.2), transparent 60%);
+}
+
+.story-bubble.dialogue-threat {
+    border-color: rgba(255, 100, 120, 0.6);
+    background: linear-gradient(150deg, rgba(8, 4, 6, 0.95), rgba(20, 4, 8, 0.85));
+    box-shadow:
+        0 16px 38px rgba(255, 70, 90, 0.25),
+        inset 0 0 18px rgba(255, 80, 120, 0.18);
+}
+
+.story-bubble.dialogue-command {
+    border-color: rgba(255, 200, 180, 0.25);
+    background: linear-gradient(150deg, rgba(16, 6, 12, 0.9), rgba(45, 12, 10, 0.85));
+    box-shadow: 0 12px 28px rgba(255, 180, 110, 0.18);
+}
+
+.story-bubble.dialogue-low {
+    background: rgba(8, 8, 12, 0.8);
+    opacity: 0.95;
 }
 
 .story-bubble.dialogue-low {
@@ -376,17 +434,24 @@ body.mobile-mode #app {
 
 .story-bubble.bubble-system {
     align-self: center;
-    display: block;
-    padding: 10px 22px;
-    max-width: 60%;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    max-width: 90%;
     font-size: 12px;
-    border-radius: 999px;
-    background: linear-gradient(160deg, rgba(12,8,18,0.85), rgba(10,6,12,0.78));
-    color: #dcd7ff;
-    text-align: center;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(180deg, rgba(10, 10, 12, 0.95), rgba(2, 2, 4, 0.85));
+    color: #f9f7ff;
     position: relative;
     overflow: visible;
-    border: 1px dashed rgba(255,255,255,0.25);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.story-bubble.bubble-system::before,
+.story-bubble.bubble-system::after {
+    display: none;
 }
 
 .bubble-system .system-icon {
@@ -396,36 +461,15 @@ body.mobile-mode #app {
     image-rendering: pixelated;
     top: var(--icon-offset-y, -12px);
     pointer-events: none;
-    filter: drop-shadow(0 0 6px rgba(0,0,0,0.35));
+    filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.35));
 }
 
 .bubble-system .system-icon[data-side="left"] {
-    left: -20px;
+    left: -18px;
 }
 
 .bubble-system .system-icon[data-side="right"] {
-    right: -20px;
-}
-
-.bubble-cutout {
-    position: absolute;
-    width: var(--cut-size, 40px);
-    height: var(--cut-size, 40px);
-    border-radius: 50%;
-    left: var(--cut-left, 10%);
-    top: var(--cut-top, 10%);
-    border: 1px solid rgba(255,255,255,0.05);
-    background: rgba(0,0,0,0.65);
-    box-shadow: 0 0 12px rgba(0,0,0,0.7);
-    opacity: 0.85;
-    mix-blend-mode: destination-out;
-    pointer-events: none;
-}
-
-.bubble-cutout.ring {
-    mix-blend-mode: screen;
-    background: radial-gradient(circle, transparent 55%, rgba(255,255,255,0.16) 60%, transparent 78%);
-    box-shadow: inset 0 0 18px rgba(255,255,255,0.1);
+    right: -18px;
 }
 
 .story-block {
@@ -434,7 +478,7 @@ body.mobile-mode #app {
     align-self: stretch;
     margin: 0;
     padding: 0 2%;
-    font-size: 14px;
+    font-size: var(--story-font-size, 13px);
     line-height: 1.4;
     color: #f6f0f5;
     -webkit-user-select: text;
@@ -786,18 +830,18 @@ body.mobile-mode #app {
     position: absolute;
     bottom: 44px;
     right: 0;
-    min-width: 170px;
-    padding: 8px;
-    border-radius: 16px;
-    background: rgba(15,10,18,0.85);
-    border: 1px solid rgba(255,255,255,0.12);
-    backdrop-filter: blur(14px);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    min-width: 240px;
+    padding: 12px;
+    border-radius: 18px;
+    background: rgba(16, 10, 18, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(16px);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
     opacity: 0;
     pointer-events: none;
-    transform: translateY(6px) scale(0.98);
+    transform: translateY(8px) scale(0.95);
     transition: opacity 0.18s ease, transform 0.18s ease;
     z-index: 12;
 }
@@ -808,34 +852,109 @@ body.mobile-mode #app {
     transform: translateY(0) scale(1);
 }
 
-.story-tools-menu button {
+.story-tools-menu .menu-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.menu-group.menu-tertiary {
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    padding-top: 6px;
+}
+
+.menu-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    width: 100%;
+}
+
+.menu-head {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.menu-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.menu-row button {
+    flex: 1;
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px;
+    justify-content: center;
+    gap: 6px;
     padding: 6px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
     color: #f5e9f3;
     font-size: 12px;
     cursor: pointer;
+    transition: border 0.2s ease, background 0.2s ease;
+}
+
+.menu-row button:hover {
+    border-color: rgba(255, 220, 160, 0.8);
+    background: rgba(255, 220, 160, 0.1);
+}
+
+.menu-row.restart-row button {
+    flex: 1;
+    min-width: 80px;
+}
+
+.menu-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.08em;
+}
+
+.text-size-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.text-size-control .text-size-label {
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.text-size-control input[type="range"] {
+    flex: 1;
+    accent-color: rgba(255, 220, 140, 0.9);
+    cursor: pointer;
+}
+
+.text-size-control #story-font-value {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.75);
 }
 
 .provider-control {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 12px;
     padding: 6px 8px;
     font-size: 12px;
-    color: rgba(255,255,255,0.75);
+    color: rgba(255, 255, 255, 0.75);
 }
 
 .provider-control select {
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     color: #f6eaf3;
     border-radius: 10px;
     padding: 4px 6px;
@@ -845,17 +964,25 @@ body.mobile-mode #app {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: 1;
     padding: 6px 8px;
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
     font-size: 12px;
-    color: rgba(255,255,255,0.75);
+    color: rgba(255, 255, 255, 0.75);
+    width: 100%;
 }
 
 .memory-limit-control input[type="range"] {
     flex: 1;
-    accent-color: rgba(255,180,200,0.9);
+    accent-color: rgba(255, 180, 200, 0.9);
+    cursor: pointer;
+}
+
+.menu-hint {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
 }
 
 .memory-limit-control .memory-value {
@@ -2240,6 +2367,11 @@ body.mobile-mode #app {
     background: rgba(120,200,140,0.2);
     border-color: rgba(120,200,140,0.6);
 }
+.moment-actions button.delete {
+    background: rgba(255,80,80,0.14);
+    border-color: rgba(255,80,80,0.5);
+    color: #ffcccc;
+}
 .moment-comment-panel {
     margin-top: 6px;
     border: 1px solid rgba(255,255,255,0.12);
@@ -2485,6 +2617,19 @@ body.mobile-mode #app {
     background: rgba(0,0,0,0.65);
     color: #fff;
     cursor: pointer;
+}
+
+#chat-recall-btn {
+    width: auto;
+    min-width: 60px;
+    padding: 0 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+    color: #fff;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    display: none;
 }
 .chat-unread-total {
     display: inline-flex;

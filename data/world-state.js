@@ -76,7 +76,8 @@ const initialCallHistory = () => ([
 
 const defaultStoryScript = `
 #N 主线从这里开始。夜班后的便利店只剩冰柜的嗡鸣，你靠在玻璃上听雨和远处的广播共享同一个频率。
-霓虹在积水里弯成失真的线，他的目光顺着玻璃门滑过，像在审视逃生口。
+
+#N 霓虹在积水里弯成失真的线，他的目光顺着玻璃门滑过，像在审视逃生口。
 
 #A 他走近时让冷气先碰到你，指节扫过肩胛，低声命令：“贴着门站好。”
 
@@ -452,6 +453,39 @@ export function sendMessage(chatId, text, author = "out", meta = {}) {
 
 export function appendSystemMessage(chatId, text, meta = {}) {
     return sendMessage(chatId, text, "in", meta);
+}
+
+export function withdrawChatMessage(chatId) {
+    const chat = getChatById(chatId);
+    if (!chat || !chat.log?.length) return null;
+    const lastIndex = [...chat.log].map((entry, idx) => ({ entry, idx })).reverse().find(item => item.entry.from === "out");
+    if (!lastIndex) return null;
+    const removed = chat.log.splice(lastIndex.idx, 1)[0];
+    const notice = {
+        from: "system",
+        text: "你撤回了一条消息。",
+        kind: "notice",
+        time: Date.now()
+    };
+    chat.log.push(notice);
+    chat.preview = computeChatPreview(chat.log);
+    chat.time = "刚刚";
+    emit("chats:withdraw", { chatId, message: notice, removed });
+    return removed;
+}
+
+export function deleteMoment(momentId) {
+    const index = worldState.moments.findIndex(m => m.id === momentId);
+    if (index === -1) return null;
+    const [removed] = worldState.moments.splice(index, 1);
+    emit("moments:delete", { momentId, moment: removed });
+    addShortEventMemory({
+        type: "moments-delete",
+        app: "moments",
+        text: removed?.text || "删除了朋友圈",
+        meta: { momentId }
+    });
+    return removed;
 }
 
 export function addMomentComment(momentId, comment) {

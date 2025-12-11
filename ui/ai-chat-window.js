@@ -13,6 +13,8 @@ export function initAIChatWindow(options = {}) {
     const restartButtons = restartSheet?.querySelectorAll("[data-restart]");
     const memorySlider = document.getElementById("long-memory-slider");
     const memoryValue = document.getElementById("long-memory-value");
+    const fontSlider = document.getElementById("story-font-slider");
+    const fontValue = document.getElementById("story-font-value");
     const providerSelect = document.getElementById("ai-provider-select");
     const editSheet = document.getElementById("story-edit-sheet");
     const editInput = document.getElementById("story-edit-input");
@@ -41,6 +43,7 @@ export function initAIChatWindow(options = {}) {
         startDivider: null
     };
     let lastBubbleType = null;
+    let lastBubbleNode = null;
 
     function limitTwoLines() {
         storyInput.classList.remove("expanded");
@@ -442,6 +445,17 @@ export function initAIChatWindow(options = {}) {
         }
     }
 
+    function initFontSliderControl() {
+        if (!fontSlider || !fontValue) return;
+        const updateFontSize = () => {
+            const value = `${fontSlider.value}px`;
+            document.documentElement.style.setProperty("--story-font-size", value);
+            fontValue.textContent = value;
+        };
+        fontSlider.addEventListener("input", updateFontSize);
+        updateFontSize();
+    }
+
     function showToast(text) {
         if (!text) return;
         let toast = document.createElement("div");
@@ -591,6 +605,7 @@ export function initAIChatWindow(options = {}) {
             bubble.dataset.snapshot = snapshotId;
         }
         bubble.__storyEntry = entry;
+        applyBubbleSpacing(bubble, rendered?.meta);
         attachBubbleMenu(bubble, entry);
         target.replaceWith(bubble);
         if (entry.role === "system" && aiGroupState.armed) {
@@ -606,6 +621,7 @@ export function initAIChatWindow(options = {}) {
 
     initProviderControl();
     initMemorySliderControl();
+    initFontSliderControl();
     limitTwoLines();
 
     return {
@@ -619,6 +635,7 @@ export function initAIChatWindow(options = {}) {
             latestSystemId = null;
             resetAiGroupState();
             lastBubbleType = null;
+            lastBubbleNode = null;
             entries.forEach(entry => appendBubble(entry));
             refreshLatestSystem(entries);
             scrollToBottom();
@@ -637,10 +654,13 @@ export function initAIChatWindow(options = {}) {
         const type = meta?.type || node.dataset.storyType || null;
         const variant = meta?.dialogueVariant || node.dataset.dialogueVariant || null;
         const spacing = computeBubbleSpacing(lastBubbleType, type, variant);
-        if (spacing) {
-            node.style.marginTop = `${spacing.marginTop || 0}px`;
-            node.style.marginBottom = `${spacing.marginBottom || 0}px`;
+        if (spacing?.marginBottom != null && lastBubbleNode) {
+            lastBubbleNode.style.marginBottom = `${spacing.marginBottom}px`;
         }
-        lastBubbleType = type || lastBubbleType;
+        if (spacing?.marginTop != null) {
+            node.style.marginTop = `${spacing.marginTop}px`;
+        }
+        lastBubbleType = type;
+        lastBubbleNode = node;
     }
 }
