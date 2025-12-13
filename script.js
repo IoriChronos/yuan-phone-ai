@@ -95,6 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
     })) || {};
     safe("story-hydrate", () => hydrateStoryLog());
     safe("story-stream", () => bindStoryStream());
+    safe("story-hide-toggle", () => initStoryHideToggle());
 
     window.addEventListener("message", (event) => {
         if (typeof event.data === "string") {
@@ -131,6 +132,19 @@ function bindStoryStream() {
         }
     });
     storyBound = true;
+}
+
+function initStoryHideToggle() {
+    const panel = document.getElementById("story-panel");
+    if (!panel || panel.__hideToggleBound) return;
+    panel.__hideToggleBound = true;
+    // 确保刷新后默认可见
+    panel.classList.remove("story-hide-text");
+    const handler = (ev) => {
+        if (ev.target.closest(".story-bubble") || ev.target.closest("#story-input") || ev.target.closest(".story-input-bar")) return;
+        panel.classList.toggle("story-hide-text");
+    };
+    panel.addEventListener("dblclick", handler, true);
 }
 
 async function handleStorySubmit(text) {
@@ -291,83 +305,100 @@ function stirAbyss(entry) {
     const denseLen = text.replace(/\s+/g, "").length;
     const now = Date.now();
     abyssBubbleCount += 1;
-    let used = 0;
-    const tryUse = (fn) => {
-        if (used >= 2 || !fn) return;
-        used += 1;
-        fn();
+
+    const FX_TRIGGERS = {
+        ambient: /(夜里|深夜|灯光|雨|下雨|窗外|天色|房间里|安静|沉默|空气|阴冷|发凉)/,
+        fogDual: /(雾|云|冷了下来|冷脸|冷笑|生气)/,
+        gaze: /(看着你|盯着你|目光|记录|确认|规则|记住|凝视|注视)/,
+        psyche: /(呼吸变慢|喉咙发紧|意识到|察觉|没法拒绝|无法反驳|被迫|不由自主|压迫感)/,
+        disorient: /(忽然|突然|不对劲|像是|仿佛|时间停了一下|脸红|羞|恍惚)/,
+        jump: /(古代|烛火|灯光|后室|回廊|空房间|黄光|阳光|修仙|灵气|阵法|山门|jump)/i,
+        tentacle: /(触手|缠绕|卷住|伸出|蠕|裹住)/,
+        egg: /(彩蛋|符印|蛋|礼物|宝箱)/
     };
 
-    const ambientKeywords = /(夜里|深夜|灯光|雨|下雨|窗外|天色|房间里|安静|沉默|空气|阴冷|发凉)/;
-    const presenceKeywords = /(靠近|贴近|站在你身后|低头|俯身|伸手|扣住|按住|不许|别动|听话)/;
-    const gazeKeywords = /(看着你|盯着你|目光|记录|确认|规则|记住)/;
-    const psycheKeywords = /(呼吸变慢|喉咙发紧|意识到|察觉|没法拒绝|无法反驳|被迫|不由自主)/;
-    const disorientKeywords = /(忽然|突然|不对劲|像是|仿佛|时间停了一下)/;
-    const worldJumpAncient = /(古代|宫殿|烛火|甲胄)/;
-    const worldJumpBackrooms = /(后室|回廊|空房间|黄光)/;
-    const worldJumpCultivation = /(修仙|灵气|阵法|山门)/;
-    const tentacleKeywords = /(触手|缠绕|卷住|伸出|蠕)/;
-    const eggKeywords = /(彩蛋|小游戏|符印|点击|小机关)/;
-
-    const triggerAmbient = (ambientKeywords.test(text) || denseLen >= 45) && (abyssBubbleCount - lastAmbientAt >= 3);
-
-    // Anomaly tier
-    const jumpHit = worldJumpAncient.test(text) || worldJumpBackrooms.test(text) || worldJumpCultivation.test(text);
-    if (jumpHit) {
-        tryUse(() => {
-            engine.fog?.("shift", 1.1 + Math.random() * 0.4);
-            engine.spaceWarp?.();
-        });
-        markAwaken("fog", now);
-        abyssSilence = 3;
-        lastAmbientAt = abyssBubbleCount;
-        return;
-    }
-    if (disorientKeywords.test(text)) {
-        tryUse(() => engine.glitchFlash?.());
-        if (Math.random() > 0.5) {
-            tryUse(() => engine.dimSurround?.(0.25 + Math.random() * 0.2));
-        }
-    }
-
-    // Presence / Control
-    if (presenceKeywords.test(text)) {
-        if (canAwaken("gaze", now)) {
-            tryUse(() => {
-                engine.predatorGaze?.((-4 + Math.random() * 8).toFixed(1));
+    const detectors = [
+        {
+            id: "jump",
+            priority: 1,
+            match: FX_TRIGGERS.jump.test(text),
+            action: () => {
+                engine.jumpBurst?.();
+            }
+        },
+        {
+            id: "tentacle",
+            priority: 2,
+            match: FX_TRIGGERS.tentacle.test(text) && canAwaken("tentacle", now),
+            action: () => {
+                const count = Math.random() > 0.5 ? 2 : 1;
+                const speed = 0.8 + Math.random() * 0.6;
+                const thickness = 0.8 + Math.random() * 0.9;
+                engine.summonTentacle?.({ count, speed, thickness });
+                markAwaken("tentacle", now);
+            }
+        },
+        {
+            id: "fog-high",
+            priority: 3,
+            match: FX_TRIGGERS.fogDual.test(text) && canAwaken("fog", now),
+            action: () => {
+                engine.fogUpper?.(0.98 + Math.random() * 0.3);
+                engine.fogBase?.(1.08 + Math.random() * 0.32);
+                markAwaken("fog", now);
+                lastAmbientAt = abyssBubbleCount;
+            }
+        },
+        {
+            id: "gaze",
+            priority: 4,
+            match: FX_TRIGGERS.gaze.test(text) && canAwaken("gaze", now),
+            action: () => {
+                engine.predatorGaze?.((-6 + Math.random() * 12).toFixed(1));
                 markAwaken("gaze", now);
-            });
+            }
+        },
+        {
+            id: "psyche",
+            priority: 5,
+            match: FX_TRIGGERS.psyche.test(text),
+            action: () => engine.dimSurround?.(0.35 + Math.random() * 0.25)
+        },
+        {
+            id: "egg",
+            priority: 6,
+            match: FX_TRIGGERS.egg.test(text) || Math.random() < 0.06,
+            action: () => {
+                engine.showSigil?.();
+                engine.eggBurst?.();
+            }
+        },
+        {
+            id: "disorient",
+            priority: 7,
+            match: FX_TRIGGERS.disorient.test(text),
+            action: () => engine.glitchFlash?.()
         }
-    } else if (gazeKeywords.test(text) && canAwaken("gaze", now)) {
-        tryUse(() => {
-            engine.predatorGaze?.((-6 + Math.random() * 12).toFixed(1));
-            markAwaken("gaze", now);
-        });
+    ];
+
+    const triggerAmbient = (FX_TRIGGERS.ambient.test(text) || denseLen >= 45) && (abyssBubbleCount - lastAmbientAt >= 3);
+
+    detectors.sort((a, b) => (a.priority || 99) - (b.priority || 99));
+    let used = 0;
+    for (const detector of detectors) {
+        if (used >= 3) break;
+        if (detector.match && detector.action) {
+            detector.action();
+            used += 1;
+            if (detector.id === "jump") break;
+        }
     }
 
-    if (psycheKeywords.test(text)) {
-        tryUse(() => engine.dimSurround?.(0.35 + Math.random() * 0.25));
-    }
-
-    if (tentacleKeywords.test(text) && canAwaken("tentacle", now)) {
-        const count = Math.random() > 0.5 ? 2 : 1;
-        const speed = 0.8 + Math.random() * 0.6;
-        const thickness = 0.8 + Math.random() * 0.9;
-        tryUse(() => engine.summonTentacle?.({ count, speed, thickness }));
-        markAwaken("tentacle", now);
-    }
-
-    if (eggKeywords.test(text)) {
-        tryUse(() => engine.glitchFlash?.());
-        tryUse(() => engine.showSigil?.());
-    }
-
-    // Ambient (last)
-    if (triggerAmbient && canAwaken("fog", now)) {
-        const power = 0.8 + Math.random() * 0.5;
-        tryUse(() => engine.fog?.("soft", power));
-        lastAmbientAt = abyssBubbleCount;
+    if (used === 0 && triggerAmbient && canAwaken("fog", now)) {
+        const power = 1 + Math.random() * 0.2;
+        engine.fogBase?.(power);
         markAwaken("fog", now);
+        lastAmbientAt = abyssBubbleCount;
     }
 }
 

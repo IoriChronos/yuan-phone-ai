@@ -646,7 +646,25 @@ export function initAIChatWindow(options = {}) {
             resetAiGroupState();
             lastBubbleType = null;
             lastBubbleNode = null;
-            entries.forEach(entry => appendBubble(entry));
+            let lastRole = null;
+            entries.forEach(entry => {
+                const role = entry.role || "system";
+                const shouldGroup = storyLog.childElementCount > 0; // 跳过最初默认文本
+                if (role === "system" && shouldGroup) {
+                    if (!aiGroupState.armed) beginAiReplyGroup();
+                } else if (aiGroupState.armed && aiGroupState.started) {
+                    endAiReplyGroup();
+                }
+                const bubble = appendBubble(entry);
+                lastRole = role;
+                if (role === "system" && aiGroupState.armed) {
+                    aiGroupState.lastBubble = bubble || aiGroupState.lastBubble;
+                    aiGroupState.started = true;
+                }
+            });
+            if (aiGroupState.armed && aiGroupState.started) {
+                endAiReplyGroup();
+            }
             refreshLatestSystem(entries);
             scrollToBottom();
         },

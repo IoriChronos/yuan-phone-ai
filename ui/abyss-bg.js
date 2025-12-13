@@ -1,3 +1,5 @@
+import { buildCloudSpriteSet, buildEggSpriteSet } from "./pixel.js";
+
 const LAYER1_COLORS = ["#12070f", "#1f0a1b", "#2e0c26", "#3c1231", "#160812"];
 const LAYER2_COLORS = ["#f6c36a", "#d86a8a", "#b08cff"];
 const LAYER3_COLORS = ["#ffb46e", "#ff7fa5", "#c38fff"];
@@ -10,6 +12,9 @@ export function initAbyssBackground(panel = document.getElementById("story-panel
     if (!panel) return null;
     if (panel.__abyssBg) return panel.__abyssBg;
 
+    const baseLayer = panel.querySelector("#story-fx-base") || panel;
+    const upperLayer = panel.querySelector("#story-fx-upper") || panel;
+
     const root = document.createElement("div");
     root.id = "abyss-bg";
     const layer1 = document.createElement("canvas");
@@ -18,6 +23,10 @@ export function initAbyssBackground(panel = document.getElementById("story-panel
     layer2.id = "abyss-layer-2";
     const layer3 = document.createElement("canvas");
     layer3.id = "abyss-layer-3";
+    const ambientFog = document.createElement("div");
+    ambientFog.className = "panel-fog ambient-fog";
+    const ambientFogGhost = document.createElement("div");
+    ambientFogGhost.className = "panel-fog ambient-fog ghost";
     const fogBack = document.createElement("div");
     fogBack.className = "abyss-fog fog-back";
     const tentacleLayer = document.createElement("div");
@@ -34,17 +43,46 @@ export function initAbyssBackground(panel = document.getElementById("story-panel
     glitch.className = "abyss-glitch";
     const warp = document.createElement("div");
     warp.className = "abyss-warp";
+    const jump = document.createElement("div");
+    jump.className = "abyss-jump";
+    const eggFx = document.createElement("div");
+    eggFx.className = "abyss-egg";
     const permit = document.createElement("div");
     permit.className = "abyss-permission";
-    root.append(layer1, layer2, layer3, fogBack, tentacleLayer, fogFront, wave, gaze, dim, glitch, warp, permit);
-    panel.insertBefore(root, panel.firstChild);
+    root.append(ambientFog, ambientFogGhost, layer1, layer2, layer3, fogBack, tentacleLayer, fogFront, wave, gaze, dim, glitch, warp, jump, permit);
 
-    const engine = createAbyssEngine(panel, root, [layer1, layer2, layer3]);
+    const baseFogLayer = document.createElement("div");
+    baseFogLayer.className = "panel-fog-layer base";
+    const upperFogLayer = document.createElement("div");
+    upperFogLayer.className = "panel-fog-layer upper";
+    const upperTentacleLayer = document.createElement("div");
+    upperTentacleLayer.className = "abyss-tentacles upper";
+
+    baseLayer.appendChild(root);
+    baseLayer.appendChild(baseFogLayer);
+    upperLayer.appendChild(upperFogLayer);
+    upperLayer.appendChild(upperTentacleLayer);
+    upperLayer.appendChild(eggFx);
+
+    const engine = createAbyssEngine(panel, root, [layer1, layer2, layer3], {
+        baseLayer,
+        upperLayer,
+        baseFogLayer,
+        upperFogLayer,
+        upperTentacleLayer
+    });
     panel.__abyssBg = engine;
     return engine;
 }
 
-function createAbyssEngine(panel, root, canvases) {
+function createAbyssEngine(panel, root, canvases, layers = {}) {
+    const {
+        baseLayer = panel,
+        upperLayer = panel,
+        baseFogLayer = baseLayer,
+        upperFogLayer = upperLayer,
+        upperTentacleLayer = null
+    } = layers;
     const [fogCanvas, sparkCanvas, pulseCanvas] = canvases;
     const fogCtx = fogCanvas.getContext("2d");
     const sparkCtx = sparkCanvas.getContext("2d");
@@ -57,21 +95,9 @@ function createAbyssEngine(panel, root, canvases) {
     const dim = root.querySelector(".abyss-dim");
     const glitch = root.querySelector(".abyss-glitch");
     const warp = root.querySelector(".abyss-warp");
+    const jump = root.querySelector(".abyss-jump");
+    const eggFx = upperLayer.querySelector(".abyss-egg") || root.querySelector(".abyss-egg");
     const permit = root.querySelector(".abyss-permission");
-    const sigil = document.createElement("button");
-    sigil.className = "abyss-sigil";
-    sigil.type = "button";
-    sigil.textContent = "✶";
-    sigil.title = "点击符印";
-    sigil.style.display = "none";
-    root.appendChild(sigil);
-    sigil.addEventListener("click", () => {
-        sigil.classList.remove("show");
-        sigil.style.display = "none";
-        glitch?.classList.add("glitch-on");
-        setTimeout(() => glitch?.classList.remove("glitch-on"), 900);
-    });
-
     let width = 0;
     let height = 0;
 
@@ -83,11 +109,14 @@ function createAbyssEngine(panel, root, canvases) {
     let waveTimer = null;
     let gazeTimer = null;
     let tentacleCount = 0;
+    let overlayTentacleCount = 0;
     let dimTimer = null;
     let glitchTimer = null;
     let warpTimer = null;
+    let jumpTimer = null;
     let permitTimer = null;
-    let sigilTimer = null;
+    const cloudSprites = buildCloudSpriteSet();
+    const eggSprites = buildEggSpriteSet();
 
     function resize() {
         const rect = panel.getBoundingClientRect();
@@ -130,6 +159,13 @@ function createAbyssEngine(panel, root, canvases) {
             }
             clearTimeout(fogTimer);
             fogTimer = setTimeout(() => root.classList.remove(cls), mode === "surge" ? 9000 : 7000);
+            spawnFogSweep(mode === "high" || mode === "upper" ? "upper" : "base", power);
+        },
+        fogBase(power = 1) {
+            spawnFogSweep("base", power);
+        },
+        fogUpper(power = 1) {
+            spawnFogSweep("upper", power);
         },
         summonTentacle(options = {}) {
             const { count = 1, speed = 1, thickness = 1 } = options;
@@ -140,10 +176,16 @@ function createAbyssEngine(panel, root, canvases) {
             for (let i = 0; i < spawnCount; i++) {
                 const t = document.createElement("div");
                 t.className = "abyss-tentacle";
-                const overlay = !overlaySpawned && (i === 0 || Math.random() > 0.4);
+                const base = document.createElement("div");
+                base.className = "tentacle-base";
+                const body = document.createElement("div");
+                body.className = "tentacle-body";
+                t.append(base, body);
+                const overlay = !overlaySpawned && Math.random() < 0.3;
+                const targetLayer = overlay && upperTentacleLayer ? upperTentacleLayer : tentacleLayer;
                 if (overlay) {
                     t.classList.add("overlay");
-                    const top = -10 + Math.random() * 50;
+                    const top = -4 + Math.random() * 36;
                     t.style.top = `${top.toFixed(1)}%`;
                     t.style.bottom = "auto";
                     overlaySpawned = true;
@@ -159,7 +201,9 @@ function createAbyssEngine(panel, root, canvases) {
                 t.style.setProperty("--tentacle-left", `${px.toFixed(1)}%`);
                 t.style.setProperty("--tentacle-delay", `${delay.toFixed(2)}s`);
                 t.style.setProperty("--tentacle-thickness", thicknessScale.toFixed(2));
-                tentacleLayer.appendChild(t);
+                const edge = pick(["left", "right", "bottom"]);
+                t.style.setProperty("--tentacle-edge", edge);
+                (targetLayer || tentacleLayer).appendChild(t);
                 tentacleCount++;
                 setTimeout(() => {
                     t.classList.add("retreat");
@@ -184,6 +228,15 @@ function createAbyssEngine(panel, root, canvases) {
         predatorGaze(tilt = 0) {
             root.classList.add("gaze-on");
             if (gaze) {
+                const palette = pick([
+                    { ring: "rgba(246,195,106,0.4)", core: "rgba(124,16,37,0.35)", glow: "rgba(246,195,106,0.45)", pixel: "#f6c36a" },
+                    { ring: "rgba(220,120,120,0.5)", core: "rgba(160,20,30,0.4)", glow: "rgba(255,120,120,0.5)", pixel: "#ff4a4a" },
+                    { ring: "rgba(246,195,106,0.5)", core: "rgba(200,60,40,0.35)", glow: "rgba(255,140,90,0.5)", pixel: "linear-gradient(90deg, #ffb84d 0%, #ff6a4d 100%)" }
+                ]);
+                gaze.style.setProperty("--gaze-ring", palette.ring);
+                gaze.style.setProperty("--gaze-core", palette.core);
+                gaze.style.setProperty("--gaze-glow", palette.glow);
+                gaze.style.setProperty("--gaze-pixel", palette.pixel);
                 gaze.style.setProperty("--gaze-tilt", `${tilt}deg`);
             }
             clearTimeout(gazeTimer);
@@ -200,7 +253,7 @@ function createAbyssEngine(panel, root, canvases) {
             if (!glitch) return;
             glitch.classList.add("glitch-on");
             clearTimeout(glitchTimer);
-            glitchTimer = setTimeout(() => glitch.classList.remove("glitch-on"), 900);
+            glitchTimer = setTimeout(() => glitch.classList.remove("glitch-on"), 1000);
         },
         spaceWarp() {
             if (!warp) return;
@@ -208,22 +261,29 @@ function createAbyssEngine(panel, root, canvases) {
             clearTimeout(warpTimer);
             warpTimer = setTimeout(() => warp.classList.remove("warp-on"), 1400);
         },
+        jumpBurst() {
+            if (!jump) return;
+            const spin = (-6 + Math.random() * 12).toFixed(1);
+            jump.style.setProperty("--jump-rot", `${spin}deg`);
+            jump.classList.add("jump-on");
+            spawnJumpPixels();
+            clearTimeout(jumpTimer);
+            jumpTimer = setTimeout(() => jump.classList.remove("jump-on"), 1200);
+        },
+        eggBurst() {
+            if (!eggFx) return;
+            spawnEggPixels();
+            setTimeout(() => {
+                if (eggFx) eggFx.innerHTML = "";
+            }, 1800);
+        },
         allowGlow() {
             if (!permit) return;
             permit.classList.add("permit-on");
             clearTimeout(permitTimer);
             permitTimer = setTimeout(() => permit.classList.remove("permit-on"), 1800);
         },
-        showSigil() {
-            if (!sigil) return;
-            sigil.style.display = "block";
-            sigil.classList.add("show");
-            clearTimeout(sigilTimer);
-            sigilTimer = setTimeout(() => {
-                sigil.classList.remove("show");
-                sigil.style.display = "none";
-            }, 6000);
-        },
+        showSigil() {},
         destroy() {
             if (rafId) cancelAnimationFrame(rafId);
             clearTimeout(fogTimer);
@@ -233,9 +293,263 @@ function createAbyssEngine(panel, root, canvases) {
             clearTimeout(glitchTimer);
             clearTimeout(warpTimer);
             clearTimeout(permitTimer);
-            clearTimeout(sigilTimer);
+            clearTimeout(jumpTimer);
         }
     };
+
+    function spawnFogSweep(which = "base", power = 1) {
+        const node = document.createElement("div");
+        node.className = `panel-fog sweep ${which === "upper" ? "fog-high" : "fog-low"}`;
+        const depth = Math.min(1.6, Math.max(0.7, power));
+        node.style.setProperty("--fog-power", depth.toFixed(2));
+        const host = which === "upper" ? upperFogLayer : baseFogLayer;
+
+        const cloudPack = document.createElement("div");
+        cloudPack.className = `fog-sprite-pack ${which === "upper" ? "pack-high" : "pack-low"}`;
+        const palette = which === "upper" ? "dark" : "light";
+        const total = which === "upper" ? Math.max(1, Math.floor(Math.random() * 4)) : (1 + Math.floor(Math.random() * 4));
+        if (total <= 0) return;
+        const used = [0, 0, 0];
+        const cloudPositions = [];
+        let avgScale = 1;
+        const anchor = palette === "dark"
+            ? { x: 84 + Math.random() * 8, y: 28 + Math.random() * 32 }
+            : { x: 8 + Math.random() * 10, y: 32 + Math.random() * 28 };
+        for (let i = 0; i < total; i++) {
+            let variant = i % 3;
+            used[variant] += 1;
+            const cloud = document.createElement("div");
+            cloud.className = `fog-cloud ${palette === "dark" ? "dark" : "light"} variant-${["a", "b", "c"][variant]}`;
+            const bias = Math.pow(Math.random(), 0.35); // 倾向更大
+            const minScale = palette === "dark" ? 0.95 : 1.6;
+            const maxScale = palette === "dark" ? 2.0 : 2.8;
+            const scale = minScale + (maxScale - minScale) * bias;
+            cloud.style.setProperty("--scale", scale.toFixed(2));
+            if (palette === "dark") {
+                cloud.style.setProperty("--cloud-fill", "#5a6aa3");
+                cloud.style.setProperty("--cloud-stroke", "#92a3e0");
+                cloud.style.setProperty("--cloud-glow", "rgba(130,158,240,0.55)");
+            } else {
+        cloud.style.setProperty("--cloud-fill", "#ffe7c8");
+        cloud.style.setProperty("--cloud-stroke", "#ffd6a2");
+        cloud.style.setProperty("--cloud-glow", "rgba(255,216,172,0.6)");
+    }
+
+    function spawnTentacleBase(edge = "left") {
+        const y = Math.random() * 100;
+        const x = Math.random() * 100;
+        if (edge === "left") return { x: `${-8 + Math.random() * 6}%`, y: `${y.toFixed(1)}%` };
+        if (edge === "right") return { x: `${104 + Math.random() * 6}%`, y: `${y.toFixed(1)}%` };
+        // bottom
+        return { x: `${x.toFixed(1)}%`, y: `${104 + Math.random() * 6}%` };
+    }
+
+    function inwardAngle(edge = "left") {
+        if (edge === "left") return 0 + Math.random() * 30;
+        if (edge === "right") return 150 + Math.random() * 30;
+        return 270 - Math.random() * 30;
+    }
+
+        const offsetX = (Math.random() - 0.5) * 10;
+        const offsetY = (Math.random() - 0.5) * 8;
+        const pos = { x: anchor.x + offsetX, y: anchor.y + offsetY };
+        cloud.style.left = `${pos.x}%`;
+        cloud.style.top = `${pos.y}%`;
+        const spriteUrl = cloudSprites[palette === "dark" ? "dark" : "light"][variant];
+        cloud.style.backgroundImage = `url(${spriteUrl})`;
+        const baseW = 220;
+        const baseH = 140;
+        cloud.style.width = `${baseW * 0.6}px`;
+        cloud.style.height = `${baseH * 0.6}px`;
+        cloud.style.transform = `scale(${scale.toFixed(2)})`;
+        cloud.style.transformOrigin = "center";
+        const alphaMax = palette === "dark" ? 0.95 : 0.96;
+        const alphaMin = alphaMax - 0.12;
+        const alpha = alphaMax - ((scale - minScale) / (maxScale - minScale)) * 0.12;
+        cloud.style.opacity = Math.max(alphaMin, Math.min(alphaMax, alpha)).toFixed(2);
+        cloudPack.appendChild(cloud);
+        cloudPositions.push(pos);
+        avgScale += (scale - avgScale) / (i + 1);
+    }
+
+        // pack-level drift so云束整体移动，内部相对关系锁定
+        const drift = computeDrift(anchor.x, anchor.y, avgScale, palette === "dark" ? "right" : "left");
+        cloudPack.style.setProperty("--pack-dx", `${drift.dx}px`);
+        cloudPack.style.setProperty("--pack-dy", `${drift.dy}px`);
+        cloudPack.style.setProperty("--pack-dur", `${drift.dur}s`);
+        node.appendChild(cloudPack);
+        (host || baseLayer).appendChild(node);
+        const ttl = Math.max(6, drift.dur + 2.2);
+        setTimeout(() => node.remove(), ttl * 1000);
+    }
+
+    function spawnJumpPixels() {
+        if (!jump) return;
+        jump.innerHTML = "";
+        const pack = document.createElement("div");
+        pack.className = "jump-pack";
+        const shards = 8;
+        for (let i = 0; i < shards; i++) {
+            const s = document.createElement("div");
+            s.className = "jump-shard";
+            const angle = (360 / shards) * i + Math.random() * 10;
+            const dist = 22 + Math.random() * 12;
+            s.style.setProperty("--angle", `${angle}deg`);
+            s.style.setProperty("--dist", `${dist}px`);
+            s.style.animationDelay = `${(i * 0.02).toFixed(2)}s`;
+            pack.appendChild(s);
+        }
+        const core = document.createElement("div");
+        core.className = "jump-core";
+        pack.appendChild(core);
+        jump.appendChild(pack);
+        setTimeout(() => jump.innerHTML = "", 1200);
+    }
+
+    function spawnEggPixels() {
+        if (!eggFx) return;
+        eggFx.innerHTML = "";
+        const variant = Math.floor(Math.random() * 3);
+        const spriteUrl = eggSprites[variant];
+        const img = document.createElement("img");
+        img.className = `egg-pack variant-${variant}`;
+        img.src = spriteUrl;
+        const size = 180;
+        img.width = size;
+        img.height = size;
+        img.style.width = `${size}px`;
+        img.style.height = `${size}px`;
+        img.style.marginLeft = `${-size / 2}px`;
+        img.style.marginTop = `${-size / 2}px`;
+        const xZone = 44 + Math.random() * 12;
+        const yZone = 34 + Math.random() * 28;
+        img.style.left = `${xZone}%`;
+        img.style.top = `${yZone}%`;
+        img.title = "彩蛋";
+        img.addEventListener("click", () => {
+            img.classList.add("egg-pop");
+            setTimeout(() => img.classList.remove("egg-pop"), 600);
+            if (variant === 1) {
+                window.dispatchEvent(new CustomEvent("abyss:egg:moment", { detail: { variant: "blue" } }));
+            }
+        });
+        eggFx.appendChild(img);
+        setTimeout(() => eggFx.innerHTML = "", 2400);
+    }
+
+    function randomSpawnLeft() {
+        const y = 18 + Math.random() * 60;
+        const x = 4 + Math.random() * 12; // 画面内左侧
+        return { x, y };
+    }
+
+    function randomSpawnRight() {
+        const y = 16 + Math.random() * 60;
+        const x = 84 + Math.random() * 12; // 画面内右侧
+        return { x, y };
+    }
+
+    function computeDrift(xPerc, yPerc, scale, side) {
+        const targetX = side === "right" ? 60 : 40;
+        const targetY = 40 + (Math.random() - 0.5) * 20;
+        const dx = (targetX - xPerc) * 0.62;
+        const dy = (targetY - yPerc) * 0.46;
+        // 大云慢，小云快，范围 3s ~ 5.6s
+        const dur = Math.max(3, Math.min(5.6, 5.6 - (scale * 0.32)));
+        return { dx, dy, dur };
+    }
+
+    function addCloudLumps() {
+        // 已用预渲染像素云，保持空实现以防旧调用
+    }
+
+    function buildCloudSpriteCache() {
+        const palettes = {
+            dark: { fill: "#5a6aa3" },
+            light: { fill: "#ffe7c8" }
+        };
+        const variants = {
+            a: [
+                { x: 42, y: 52, rx: 42, ry: 26 },
+                { x: 88, y: 50, rx: 46, ry: 28 },
+                { x: 66, y: 26, rx: 30, ry: 18 },
+                { x: 18, y: 60, rx: 20, ry: 14 },
+                { x: 146, y: 64, rx: 20, ry: 14 },
+                { x: 96, y: 22, rx: 18, ry: 12 }
+            ],
+            b: [
+                { x: 34, y: 50, rx: 32, ry: 20 },
+                { x: 82, y: 48, rx: 30, ry: 18 },
+                { x: 60, y: 32, rx: 20, ry: 12 }
+            ],
+            c: [
+                { x: 52, y: 52, rx: 40, ry: 22 },
+                { x: 10, y: 58, rx: 16, ry: 10 },
+                { x: 118, y: 62, rx: 16, ry: 10 },
+                { x: 2, y: 46, rx: 12, ry: 8 },
+                { x: 140, y: 66, rx: 12, ry: 8 }
+            ]
+        };
+        const cache = { dark: {}, light: {} };
+        Object.keys(palettes).forEach(pKey => {
+            Object.keys(variants).forEach((vKey, idx) => {
+                cache[pKey][idx] = createEllipseSprite(palettes[pKey], variants[vKey], 200, 120);
+            });
+        });
+        return cache;
+    }
+
+    function buildEggSpriteCache() {
+        const palettes = [
+            { fill: "#ffe6b8", accent: "#ff9ac0", badge: "#4a1e1e" },
+            { fill: "#b0e9ff", accent: "#6ac8ff", badge: "#0f2d46" },
+            { fill: "#d6c2ff", accent: "#ff9ad6", badge: "#2e1846" }
+        ];
+        return palettes.map(p => createEggSprite(p));
+    }
+
+    function createEllipseSprite(palette, lumps, width = 200, height = 120) {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return "";
+        ctx.fillStyle = palette.fill;
+        lumps.forEach(l => {
+            ctx.beginPath();
+            ctx.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        return canvas.toDataURL("image/png");
+    }
+
+    function createEggSprite(palette) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 160;
+        canvas.height = 160;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return "";
+        ctx.fillStyle = palette.fill;
+        ctx.beginPath();
+        ctx.ellipse(80, 80, 52, 64, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = palette.accent;
+        for (let i = 0; i < 12; i++) {
+            const angle = (Math.PI * 2 / 12) * i;
+            const r = 40 + Math.sin(i) * 6;
+            const x = 80 + Math.cos(angle) * r;
+            const y = 80 + Math.sin(angle) * r;
+            ctx.beginPath();
+            ctx.ellipse(x, y, 6 + (i % 3), 6 + ((i + 1) % 3), 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = palette.badge;
+        ctx.font = "bold 20px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("✶", 80, 80);
+        return canvas.toDataURL("image/png");
+    }
 }
 
 function createFogDust(count, width, height) {
