@@ -9,6 +9,7 @@ export function initAIChatWindow(options = {}) {
     const toolsMenu = document.getElementById("story-tools-menu");
     const systemBtn = document.getElementById("story-tool-system");
     const restartBtn = document.getElementById("story-tool-restart");
+    const newWindowBtn = document.getElementById("story-tool-new-window");
     const restartSheet = document.getElementById("restart-sheet");
     const restartButtons = restartSheet?.querySelectorAll("[data-restart]");
     const memorySlider = document.getElementById("long-memory-slider");
@@ -383,6 +384,16 @@ export function initAIChatWindow(options = {}) {
     restartBtn?.addEventListener("click", () => {
         toggleToolsMenu(false);
         openRestartSheet();
+    });
+
+    newWindowBtn?.addEventListener("click", () => {
+        toggleToolsMenu(false);
+        const roleId = typeof window !== "undefined" ? window.__SHELL_ROLE_ID__ || null : null;
+        try {
+            window.parent?.postMessage({ type: "shell:new-window", roleId }, "*");
+        } catch {
+            /* ignore cross-frame errors */
+        }
     });
 
     restartButtons?.forEach(btn => {

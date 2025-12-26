@@ -96,7 +96,8 @@ function createId(prefix = "id") {
 }
 
 function createDefaultState(card = getActiveCard()) {
-    const baseStory = seedDefaultStory(card);
+    const skipSeed = typeof window !== "undefined" && window.__SHELL_HOSTED__;
+    const baseStory = skipSeed ? [] : seedDefaultStory(card);
     return {
         systemVersion: SYSTEM_VERSION,
         story: baseStory.map(entry => ({ ...entry, id: entry.id || createId("story") })),

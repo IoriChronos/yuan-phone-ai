@@ -3,11 +3,21 @@ import { getLongMemory, loadLongMemory } from "../data/memory-long.js";
 import { initState, subscribeState } from "./state.js";
 
 const STORAGE_VERSION = 2;
-const STORAGE_KEYS = {
-    world: "yuan-phone:world",
-    longMemory: "yuan-phone:memory-long",
-    backupPrefix: "yuan-phone:backup:"
-};
+
+function slotSuffix() {
+    if (typeof window === "undefined") return "";
+    const slot = window.__YUAN_SLOT__ || "";
+    if (!slot) return "";
+    return `:${slot}`;
+}
+
+function storageKey(name) {
+    const suffix = slotSuffix();
+    if (name === "world") return `yuan-phone${suffix}:world`;
+    if (name === "longMemory") return `yuan-phone${suffix}:memory-long`;
+    if (name === "backupPrefix") return `yuan-phone${suffix}:backup:`;
+    return `yuan-phone${suffix}:${name}`;
+}
 const MAX_BACKUPS = 3;
 
 export function loadInitialData() {
@@ -35,7 +45,7 @@ export function saveWorldStateSnapshot(state = getWorldState()) {
         data: state
     };
     try {
-        window.localStorage.setItem(STORAGE_KEYS.world, JSON.stringify(payload));
+        window.localStorage.setItem(storageKey("world"), JSON.stringify(payload));
         writeBackup(payload);
     } catch (err) {
         console.warn("Failed to save world state", err);
@@ -45,7 +55,7 @@ export function saveWorldStateSnapshot(state = getWorldState()) {
 export function saveLongMemorySnapshot(data = getLongMemory()) {
     if (!storageAvailable()) return;
     try {
-        window.localStorage.setItem(STORAGE_KEYS.longMemory, JSON.stringify({
+        window.localStorage.setItem(storageKey("longMemory"), JSON.stringify({
             version: STORAGE_VERSION,
             data
         }));
@@ -56,7 +66,7 @@ export function saveLongMemorySnapshot(data = getLongMemory()) {
 
 function loadWorldStateSnapshot() {
     if (!storageAvailable()) return null;
-    const raw = window.localStorage.getItem(STORAGE_KEYS.world);
+    const raw = window.localStorage.getItem(storageKey("world"));
     if (!raw) return null;
     try {
         const payload = JSON.parse(raw);
@@ -69,7 +79,7 @@ function loadWorldStateSnapshot() {
 
 function loadLongMemorySnapshot() {
     if (!storageAvailable()) return [];
-    const raw = window.localStorage.getItem(STORAGE_KEYS.longMemory);
+    const raw = window.localStorage.getItem(storageKey("longMemory"));
     if (!raw) return [];
     try {
         const payload = JSON.parse(raw);
@@ -126,7 +136,7 @@ function convertLegacyState(legacy) {
 
 function writeBackup(payload) {
     try {
-        const key = `${STORAGE_KEYS.backupPrefix}${Date.now()}`;
+        const key = `${storageKey("backupPrefix")}${Date.now()}`;
         window.localStorage.setItem(key, JSON.stringify(payload));
         pruneBackups();
     } catch (err) {
@@ -138,7 +148,7 @@ function pruneBackups() {
     const keys = [];
     for (let i = 0; i < window.localStorage.length; i++) {
         const key = window.localStorage.key(i);
-        if (key && key.startsWith(STORAGE_KEYS.backupPrefix)) {
+        if (key && key.startsWith(storageKey("backupPrefix"))) {
             keys.push(key);
         }
     }

@@ -29,10 +29,15 @@ import { initAbyssBackground } from "./ui/abyss-bg.js";
 import { initCharacterProfile } from "./ui/character-profile.js";
 import { saveSlot, loadSlot, deleteSlot, listSlots } from "./data/save-slots.js";
 import { saveRoleTemp, loadRoleTemp, peekRoleTemp, clearRoleTemp } from "./data/role-temp.js";
-import { getActiveCard, listCharacterCards } from "./data/character-cards.js";
+import { getActiveCard, listCharacterCards, upsertCharacterCard, setActiveCard, GENERIC_OPENER } from "./data/character-cards.js";
+
+if (typeof window !== "undefined" && window.__SHELL_HOSTED__) {
+    document.body?.classList?.add("shell-hosted");
+}
 
 let storyUI = null;
 let storyBound = false;
+let activeShellRoleId = null;
 const abyssCooldown = {
     fog: 0,
     tentacle: 0,
@@ -114,6 +119,21 @@ document.addEventListener("DOMContentLoaded", () => {
     showRestoreHint("");
 
     window.addEventListener("message", (event) => {
+        if (event?.data?.type === "shell-chat-init" && event.data.role) {
+            const title = document.getElementById("story-title-text") || document.querySelector(".story-title");
+            if (title) title.textContent = event.data.role;
+            if (event.data.roleId) {
+                activeShellRoleId = event.data.roleId;
+                try { window.__SHELL_ROLE_ID__ = event.data.roleId; } catch { /* ignore */ }
+            }
+        }
+        if (event?.data?.type === "shell-opening" && event.data.text) {
+            playShellOpening(event.data.text);
+        }
+        if (event?.data?.type === "shell-role-sync" && event.data.role) {
+            const synced = syncShellRole(event.data.role, event.data.globalRules, event.data.globalProfile);
+            if (synced?.id) activeShellRoleId = synced.id;
+        }
         if (typeof event.data === "string") {
             const maybe = checkTriggers(event.data);
             if (maybe && typeof maybe.then === "function") {
@@ -140,10 +160,35 @@ function hydrateStoryLog() {
 }
 
 function updateRoleLabel() {
+    const override = typeof window !== "undefined" ? window.__YUAN_ROLE_NAME__ : "";
     const active = getActiveCard();
-    const name = active?.name || "元书";
+    const name = override || active?.name || "元书";
     const title = document.getElementById("story-title-text") || document.querySelector(".story-title");
-    if (title) title.textContent = name;
+    if (title) title.textContent = "";
+}
+
+function syncShellRole(role = {}, globalRules = "", globalProfile = "") {
+    const card = upsertCharacterCard({
+        id: role.id || role.roleId || "default",
+        name: role.name || "未命名角色",
+        bio: role.bio || "这一段是简介",
+        opener: role.opener || GENERIC_OPENER,
+        persona: role.persona || "",
+        worldLore: role.worldview || role.worldLore || "",
+        storyline: role.storyline || "",
+        rules: role.rules || globalRules || "",
+        profile: role.profile || globalProfile || ""
+    });
+    setActiveCard(card.id);
+    updateRoleLabel();
+    try {
+        window.__SHELL_ROLE_ID__ = card.id;
+        window.__SHELL_GLOBAL_RULES__ = globalRules || "";
+        window.__SHELL_GLOBAL_PROFILE__ = globalProfile || "";
+    } catch {
+        /* ignore */
+    }
+    return card;
 }
 
 function showRestoreHint(text) {
@@ -270,8 +315,24 @@ function initStoryHideToggle() {
 async function handleStorySubmit(text) {
     addStoryMessage("user", text);
     addEventLog({ text: `玩家：${text}`, type: "story" });
+    if (window.parent && window.parent !== window) {
+        try {
+            window.parent.postMessage({ type: "user-input", text }, "*");
+        } catch {
+            // ignore cross-origin errors
+        }
+    }
     await checkTriggers(text);
     await requestAIResponse(text, { skipTriggers: true });
+}
+
+const OPENING_META_KEY = "__shellOpeningPlayed__";
+function playShellOpening(text) {
+    const state = getWorldState();
+    const exists = (state.story || []).some(entry => entry.meta?.opening);
+    if (exists || window[OPENING_META_KEY]) return;
+    window[OPENING_META_KEY] = true;
+    addStoryMessage("system", text, { opening: true });
 }
 
 async function handleContinueRequest() {

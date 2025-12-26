@@ -106,6 +106,9 @@ export function renderStoryBubble(entry, options = {}) {
         if (entry.meta?.systemInput) {
             node.classList.add("bubble-system-input");
         }
+        if (entry.meta?.opening) {
+            node.classList.add("bubble-opening");
+        }
         const content = document.createElement("div");
         content.className = "bubble-content";
         content.innerHTML = buildParagraphHtml(meta);
