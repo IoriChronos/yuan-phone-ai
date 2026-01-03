@@ -1,8 +1,32 @@
 import { getState, updateState } from "../state.js";
 import { navigateTo } from "./nav.js";
 import { saveToast } from "../../core/save-feedback.js";
+import { normalizeInputs } from "/src/core/component-layer.js";
 
-const GENDER_OPTIONS = ["男", "女", "双性", "无性别", "ABO"];
+const GENDER_OPTIONS = ["男", "女", "双性", "无性别"];
+const ABO_SUB_OPTIONS = [
+    { value: "", label: "无（不使用 ABO，留空即可）" },
+    { value: "Alpha", label: "Alpha" },
+    { value: "Beta", label: "Beta" },
+    { value: "Omega", label: "Omega" },
+    { value: "Enigma", label: "Enigma" },
+    { value: "背景补充", label: "背景补充" }
+]; 
+
+const USER_REF_PRESETS = [
+    { id: "first", label: "一人称（我）", value: "我" },
+    { id: "second", label: "二人称（你）", value: "你" },
+    { id: "third", label: "三人称（他）", value: "他" }
+];
+
+function escapeHtml(str = "") {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 
 export function renderHome(root) {
     root.innerHTML = "";
@@ -62,27 +86,44 @@ export function renderHome(root) {
     root.appendChild(hero);
     root.appendChild(globalBar);
     root.appendChild(editor);
+    normalizeInputs(editor);
     root.appendChild(gallery);
     addHoverFeedback(root);
 
-    let drawerOpen = false;
-    const openEditor = (field) => {
-        if (!editor) return;
-        drawerOpen = true;
-        editor.classList.add("show");
-        const target = field ? editor.querySelector(`[data-field='${field}']`) : null;
-        if (target) target.focus({ preventScroll: false });
-        const y = editor.getBoundingClientRect().top + window.scrollY - 40;
-        window.scrollTo({ top: y, behavior: "smooth" });
-    };
-    const toggleEditor = (field) => {
-        if (drawerOpen) {
-            editor.classList.remove("show");
-            drawerOpen = false;
-            return;
-        }
-        openEditor(field);
-    };
+let drawerOpen = false;
+let currentSection = null;
+
+const showSection = (name) => {
+    editor.querySelectorAll(".home-rule-section").forEach(sec => {
+        sec.hidden = sec.dataset.section !== name;
+    });
+};
+
+const openEditor = (section) => {
+    drawerOpen = true;
+    currentSection = section;
+    editor.classList.add("show");
+    showSection(section);
+};
+
+const closeEditor = () => {
+    editor.classList.remove("show");
+    drawerOpen = false;
+    currentSection = null;
+};
+
+const toggleEditor = (section) => {
+    if (!drawerOpen) {
+        openEditor(section);
+        return;
+    }
+    if (currentSection === section) {
+        closeEditor();
+        return;
+    }
+    openEditor(section);
+};
+
     const bindRuleBtns = (scope) => {
         scope.querySelector("[data-act='user-rules']")?.addEventListener("click", (e) => {
             e.preventDefault();
@@ -112,8 +153,11 @@ function renderGlobalStatus(user) {
 function buildRuleDrawer(user = {}) {
     const genderValue = (user.gender || "男").toLowerCase();
     const height = user.height || "";
+    const refValue = (user.ref || "你").trim() || "你";
+
     const wrap = document.createElement("div");
     wrap.className = "home-rule-drawer";
+
     wrap.innerHTML = `
         <div class="home-rule-inner">
             <div class="home-rule-head">
@@ -125,52 +169,92 @@ function buildRuleDrawer(user = {}) {
                     <button class="primary" data-act="save">保存</button>
                 </div>
             </div>
-            <p class="home-dialog-note">这里的玩家人设与规则会在新窗口内默认载入，保持与角色卡一致的性别选项与身高。</p>
-            <label class="home-dialog-label">玩家名称 <span class="required">*</span>
-                <input type="text" data-field="name" placeholder="玩家名称" value="${user.name || ""}">
-            </label>
-            <label class="home-dialog-label">玩家性别
-                <select data-field="gender" class="pill-select">
-                    ${GENDER_OPTIONS.map(option => {
-                        const val = option.toLowerCase();
-                        const label = option === "ABO" ? "ABO" : option;
-                        const selected = genderValue === val ? "selected" : "";
-                        return `<option value="${label}" ${selected}>${label}</option>`;
-                    }).join("")}
-                </select>
-            </label>
-            <label class="home-dialog-label">身高
-                <input type="text" data-field="height" placeholder="180 cm / 5'11\\\"（可留空）" value="${height}">
-            </label>
-            <label class="home-dialog-label">玩家人设
-                <textarea rows="4" data-field="profile" placeholder="为自己写一个人设">${user.globalProfile || ""}</textarea>
-            </label>
-            <label class="home-dialog-label">全局规则
-                <textarea rows="5" data-field="rules" placeholder="为所有聊天写一组基准规则">${user.globalRules || ""}</textarea>
-            </label>
+
+            <!-- 人设区 -->
+            <section class="home-rule-section" data-section="profile" hidden>
+                <label class="home-dialog-label">玩家名称<span class="required">*</span>
+                    <input type="text" data-field="name" value="${escapeAttr(user.name || "")}">
+                </label>
+
+                <label class="home-dialog-label">
+                    玩家性别
+                    <select data-field="gender" class="pill-select">
+                        ${GENDER_OPTIONS.map(option => {
+                            const val = option.toLowerCase();
+                            const selected = (user.gender || "男").toLowerCase() === val ? "selected" : "";
+                            return `<option value="${option}" ${selected}>${option}</option>`;
+                        }).join("")}
+                    </select>
+                </label>
+
+                <label class="home-dialog-label">
+                    身高
+                    <input type="text" data-field="height" value="${escapeAttr(user.height || "")}">
+                </label>
+
+                <label class="home-dialog-label">
+                    玩家人称
+                    <select data-field="ref" class="pill-select">
+                        ${USER_REF_PRESETS.map(opt => {
+                            const selected = (user.ref || "你") === opt.value ? "selected" : "";
+                            return `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
+                        }).join("")}
+                    </select>
+                </label>
+
+                <label class="home-dialog-label">
+                    玩家人设
+                    <textarea rows="4" data-field="profile">${escapeHtml(user.globalProfile || "")}</textarea>
+                </label>
+            </section>
+
+            <!-- 规则区 -->
+            <section class="home-rule-section" data-section="rules" hidden>
+                <label class="home-dialog-label">
+                    全局规则
+                    <textarea rows="6" data-field="rules">${escapeHtml(user.globalRules || "")}</textarea>
+                </label>
+            </section>
         </div>
     `;
-    const close = () => {
-        wrap.classList.remove("show");
-    };
+
+    const close = () => wrap.classList.remove("show");
+
     wrap.querySelector("[data-act='save']")?.addEventListener("click", () => {
-        const rules = wrap.querySelector("[data-field='rules']")?.value || "";
-        const profile = wrap.querySelector("[data-field='profile']")?.value || "";
-        const name = (wrap.querySelector("[data-field='name']")?.value || "").trim() || "玩家";
-        const gender = (wrap.querySelector("[data-field='gender']")?.value || "男").trim();
-        const playerHeight = wrap.querySelector("[data-field='height']")?.value || "";
+        const name =
+            (wrap.querySelector("[data-field='name']")?.value || "").trim() || "玩家";
+        const gender =
+            (wrap.querySelector("[data-field='gender']")?.value || "男").trim();
+        const heightVal =
+            wrap.querySelector("[data-field='height']")?.value || "";
+        const ref =
+            (wrap.querySelector("[data-field='ref']")?.value || "你").trim();
+        const profile =
+            wrap.querySelector("[data-field='profile']")?.value || "";
+        const rules =
+            wrap.querySelector("[data-field='rules']")?.value || "";
+
         const current = getState();
-        updateState({ user: { ...current.user, name, gender, height: playerHeight, globalRules: rules, globalProfile: profile } });
-        const status = document.querySelector(".home-topbar-status");
-        if (status) status.textContent = renderGlobalStatus({ globalRules: rules, globalProfile: profile });
+
+        updateState({
+            user: {
+                ...current.user,
+                name,
+                gender,
+                height: heightVal,
+                ref,
+                globalProfile: profile,
+                globalRules: rules
+            }
+        });
+
         const title = document.querySelector(".home-topbar h2");
-        if (title) title.textContent = name || current.user.name || "玩家";
-        if (typeof console !== "undefined" && console.debug) {
-            console.debug("[Shell] saved global user profile", { name, gender, height: playerHeight, hasRules: Boolean(rules), hasProfile: Boolean(profile) });
-        }
+        if (title) title.textContent = name;
+
         saveToast(true, "全局设定已保存");
         close();
     });
+
     return wrap;
 }
 

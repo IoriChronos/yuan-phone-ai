@@ -38,18 +38,22 @@ function resolveButtonVariant(btn) {
     return "ui-primary";
 }
 
-function normalizeInputs(scope) {
+export function normalizeInputs(scope) {
     const fields = scope.querySelectorAll("input, textarea");
     fields.forEach(field => {
         if (field.type === "hidden") return;
         if (field.closest(".ui-select")) return;
+
         const parent = field.parentElement;
+
         if (!field.classList.contains("ui-input-field")) {
             field.classList.add("ui-input-field");
         }
+
         if (parent && parent.classList.contains("ui-input")) {
             return;
         }
+
         const wrap = document.createElement("div");
         wrap.className = "ui-input";
         if (parent) {
@@ -148,6 +152,9 @@ function applySelectShell(select) {
     const closeMenu = () => {
         wrapper.classList.remove("open");
         menu.hidden = true;
+
+        // 🔥 强制失焦，防止外部 JS 重新 open
+        trigger.blur();
     };
 
     const openMenu = () => {

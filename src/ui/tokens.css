@@ -38,6 +38,8 @@
     --ui-backdrop: rgba(7,5,10,0.72);
     --ui-backdrop-blur: 8px;
 
+    --ui-select-menu: #5b554b;
+
     --ui-header-height: 56px;
     --ui-modal-width: min(520px, 92vw);
     --ui-z-header: 30;
@@ -46,6 +48,7 @@
 }
 
 body.theme-day {
+    --ui-select-menu: #f6c36a;
     --ui-text-strong: #161018;
     --ui-text-muted: rgba(22,16,24,0.72);
     --ui-text-subtle: rgba(22,16,24,0.56);

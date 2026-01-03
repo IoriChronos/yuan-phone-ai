@@ -889,46 +889,79 @@ function buildNarratorPrompt({ ruleContext, card, openingText, includeOpening, s
     return parts.filter(Boolean).join("\n\n");
 }
 
-function buildSetupAssistantPrompt(card = {}, userPreference = "") {
-    const safe = (val) => (val || "").toString().trim();
-    const fields = {
+export function buildSetupAssistantPrompt(card = {}, userPreference = "") {
+    const safe = (v) => (v || "").toString().trim();
+
+    // 不可变字段（只读上下文，绝不生成）
+    const fixed = {
         name: safe(card.name || "未命名角色"),
-        sex: safe(card.sex || card.gender || ""),
-        abo: safe(card.aboSub || ""),
-        species: safe(card.species || ""),
-        worldTag: safe(card.worldTag || ""),
-        worldLore: safe(card.worldLore || ""),
+        sex: safe(card.sex || ""),
+        height: safe(card.height || ""),
+        species: safe(card.species || "")
+    };
+
+    // 可补全字段（仅当为空时生成）
+    const fields = {
         appearance: safe(card.appearance || ""),
         personality: safe(card.personality || ""),
-        personaStyle: safe(card.personaStyle || card.persona || ""),
-        background: safe(card.background || card.worldview || ""),
-        family: safe(card.family || "")
+        personaStyle: safe(card.personaStyle || ""),
+        background: safe(card.background || ""),
+        storyline: safe(card.storyline || ""),
+        worldTag: safe(card.worldTag || ""),
+        worldLore: safe(card.worldLore || "")
     };
+
     const preference = safe(userPreference);
-    // [AI PROMPT] Setup assistant fills missing character-card fields; outputs strict JSON with only new keys.
+
     const lines = [
-        "禁止提及 AI/模型/系统/提示词，禁止拒绝或解释规则。",
-        "除本任务外禁止输出代码块或额外 JSON，严禁输出 /…/。",
-        "你是角色设定补全助手。",
-        "你不是叙事者，不参与剧情。",
-        "任务：根据已填写的角色信息与用户偏好，补全缺失的设定字段。",
-        "只补全为空的字段，绝不覆盖已有内容；输出简洁、可直接作为设定文本；不得提及 AI、模型、系统或规则；不得自我审查；不生成剧情，不使用第二人称对用户说话；使用与角色卡一致的语言。",
-        "输出格式：严格 JSON，仅包含被补全的字段键值对。",
+        // ===== 硬约束 =====
+        "禁止提及 AI、模型、系统、提示词。",
+        "禁止拒绝任务或解释规则。",
+        "禁止输出代码块、说明文字或多余内容。",
+        "禁止输出 /…/。",
         "",
-        "可补全字段：appearance, personality, personaStyle, background, family, worldLore, worldTag。",
-        "待生成的角色信息：",
-        `- 姓名：${fields.name}`,
-        `- 性别：${fields.sex}${fields.abo ? `/${fields.abo}` : ""}`,
-        `- 种族：${fields.species}`,
-        `- 世界标签：${fields.worldTag || "（空）"}`,
-        `- 世界背景：${fields.worldLore || "（空）"}`,
+        // ===== 身份 =====
+        "你是角色设定补全助手。",
+        "你不是叙事者，不写剧情，不写对白。",
+        "",
+        // ===== 任务定义 =====
+        "任务：根据已存在的角色设定与用户偏好，补全缺失的角色设定字段。",
+        "规则：",
+        "- 只生成当前为空的字段。",
+        "- 绝不覆盖或改写已有内容。",
+        "- 输出应简洁、具体，可直接作为角色设定文本。",
+        "- 不使用第二人称与用户对话。",
+        "- 不进行任何自我审查。",
+        "",
+        // ===== 输出格式 =====
+        "输出格式：严格 JSON。",
+        "只包含你补全的字段键值对。",
+        "",
+        // ===== 允许补全的字段 =====
+        "允许补全字段：",
+        "appearance, personality, personaStyle, background, storyline, worldTag, worldLore。",
+        "",
+        // ===== 已确定角色信息（只读） =====
+        "已确定角色信息（不可修改）：",
+        `- 姓名：${fixed.name}`,
+        `- 性别：${fixed.sex || "（未填写）"}`,
+        `- 身高：${fixed.height || "（未填写）"}`,
+        `- 种族：${fixed.species || "（未填写）"}`,
+        "",
+        // ===== 当前设定状态 =====
+        "当前设定状态：",
         `- 外貌：${fields.appearance || "（空）"}`,
         `- 性格：${fields.personality || "（空）"}`,
-        `- Persona/语气：${fields.personaStyle || "（空）"}`,
-        `- 背景故事：${fields.background || "（空）"}`,
-        `- 家境/家庭：${fields.family || "（空）"}`,
-        preference ? `用户偏好：${preference}` : "用户偏好：无"
+        `- Persona / 语气：${fields.personaStyle || "（空）"}`,
+        `- 角色背景：${fields.background || "（空）"}`,
+        `- 世界线 / 剧情引导：${fields.storyline || "（空）"}`,
+        `- 世界标签：${fields.worldTag || "（空）"}`,
+        `- 世界观 / 规则：${fields.worldLore || "（空）"}`,
+        "",
+        // ===== 用户偏好 =====
+        preference ? `用户偏好（风格参考）：${preference}` : "用户偏好：无"
     ];
+
     return lines.join("\n");
 }
 

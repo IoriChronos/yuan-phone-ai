@@ -42,8 +42,15 @@ import { getWindowId } from "../core/window-context.js";
 import { saveToast } from "../core/save-feedback.js";
 import { runSetupAssistant } from "../core/ai.js";
 
-const GENDER_OPTIONS = ["男", "女", "双性", "无性别", "ABO"];
-const ABO_SUB_OPTIONS = ["Alpha", "Beta", "Omega"];
+const GENDER_OPTIONS = ["男", "女", "双性", "无性别"];
+const ABO_SUB_OPTIONS = [
+    { value: "", label: "无（不使用 ABO，留空即可）" },
+    { value: "Alpha", label: "Alpha" },
+    { value: "Beta", label: "Beta" },
+    { value: "Omega", label: "Omega" },
+    { value: "Enigma", label: "Enigma" },
+    { value: "背景补充", label: "背景补充" }
+]; 
 const SHEET_POSITIONS = ["fullscreen"];
 const PREF_KEY = "yuan-phone:character-sheet:prefs";
 const USER_REF_PRESETS = [
@@ -180,65 +187,115 @@ export function initCharacterProfile(triggerEl, sheetEl, options = {}) {
         wireInteractions(inner, active, windowId);
     }
 
-function renderRole(card) {
-        const personaText = card.personaStyle || "用一句话写下他的语气、危险感或温度。";
+
+    function renderRole(card) {
+        const personaText = card.personaStyle || "";
         const bioText = card.publicProfile || card.bio || GENERIC_BIO;
+
         const sexValue = (card.sex || "男").toLowerCase();
-        const species = card.species || "人";
+        const species = card.species ?? "";
+
         return `
             <div class="sheet-grid edit-grid">
+
+                <!-- ===== AI 会读入 ===== -->
                 <div class="info-card ui-panel">
                     <header class="card-head ui-panel-header">AI 会读入</header>
                     <section class="card-body ui-panel-body">
-                        <p class="card-note gold">✔ 以下字段每次都会注入 Narrator Prompt</p>
+                        <p class="card-note gold">
+                            ✔ 以下字段每轮注入 Narrator Prompt<br>
+                            🔒 标记为锁定的字段辅助 AI 不会修改
+                        </p>
+
                         <div class="card-form grid-two slim">
+
                             <label>角色名称 <span class="required">*</span>
-                                <input type="text" data-role-field="name" value="${escapeAttr(card.name || "")}" placeholder="写下角色名或称呼">
+                                <input type="text"
+                                    data-role-field="name"
+                                    value="${escapeAttr(card.name || "")}"
+                                    placeholder="写下角色名或称呼">
                             </label>
-                            <label>性别 <span class="required">*</span>
-                                <select data-role-field="sex" class="pill-select">
-                                    ${GENDER_OPTIONS.map(option => {
-                                        const val = option.toLowerCase();
-                                        const label = option === "ABO" ? "ABO" : option;
-                                        const selected = sexValue === val ? "selected" : "";
-                                        return `<option value="${label}" ${selected}>${label}</option>`;
-                                    }).join("")}
-                                </select>
+
+                            <label>性别 <span class="required">*</span></label>
+                            <select data-role-field="sex"
+                                    class="pill-select">
+                                ${GENDER_OPTIONS.map(option => {
+                                    const val = option.toLowerCase();
+                                    const label = option === "ABO" ? "ABO" : option;
+                                    const selected = sexValue === val ? "selected" : "";
+                                    return `<option value="${label}" ${selected}>${label}</option>`;
+                                }).join("")}
+                            </select>
+
+                            <label class="abo-sub-row" style="${sexValue === "abo" ? "" : "display:none;"}">
+                                ABO 分化
                             </label>
-                            <label class="abo-sub-row" style="${sexValue === "abo" ? "" : "display:none;"}">ABO 分化
-                                <select data-role-field="aboSub" class="pill-select">
-                                    ${ABO_SUB_OPTIONS.map(opt => {
-                                        const selected = (card.aboSub || "").toLowerCase() === opt.toLowerCase() ? "selected" : "";
-                                        return `<option value="${opt}" ${selected}>${opt}</option>`;
-                                    }).join("")}
-                                </select>
-                            </label>
+                            <select data-role-field="aboSub"
+                                    class="pill-select"
+                                    style="${sexValue === "abo" ? "" : "display:none;"}">
+                                ${ABO_SUB_OPTIONS.map(opt => {
+                                    const selected =
+                                        (card.aboSub || "").toLowerCase() === opt.toLowerCase()
+                                            ? "selected"
+                                            : "";
+                                    return `<option value="${opt}" ${selected}>${opt}</option>`;
+                                }).join("")}
+                            </select>
+
                             <label>种族 / 形态 <span class="required">*</span>
-                                <input type="text" data-role-field="species" value="${escapeAttr(species)}" placeholder="人 / 黑雾">
+                                <input type="text"
+                                    data-role-field="species"
+                                    value="${escapeAttr(species)}"
+                                    placeholder="物种，种族皆可">
                             </label>
+
                             <label>身高
-                                <input type="text" data-role-field="height" value="${escapeAttr(card.height || "")}" placeholder="180 cm / 5'11\\\"">
+                                <input type="text"
+                                    data-role-field="height"
+                                    value="${escapeAttr(card.height || "")}"
+                                    placeholder="cm">
                             </label>
+
                             <label>世界标签
-                                <input type="text" data-role-field="worldTag" value="${escapeAttr(card.worldTag || "")}" placeholder="现代都市 / 末日">
+                                <input type="text"
+                                    data-role-field="worldTag"
+                                    value="${escapeAttr(card.worldTag || "")}"
+                                    placeholder="现代都市 / 末日">
                             </label>
+
                             <label>世界背景
-                                <textarea data-role-field="worldLore" rows="2" placeholder="世界观、规则">${escapeHtml(card.worldLore || "")}</textarea>
+                                <textarea data-role-field="worldLore"
+                                        rows="2"
+                                        placeholder="世界观、规则">${escapeHtml(card.worldLore || "")}</textarea>
                             </label>
+
                             <label>角色背景 / 过往
-                                <textarea data-role-field="background" rows="2" placeholder="角色经历、过往事件、立场">${escapeHtml(card.background || "")}</textarea>
+                                <textarea data-role-field="background"
+                                        rows="2"
+                                        placeholder="角色经历、立场、已发生的重要事件">${escapeHtml(card.background || "")}</textarea>
                             </label>
+
                             <label>故事线 / 引导
-                                <textarea data-role-field="storyline" rows="2" placeholder="开局关系、引导目标、剧情提醒">${escapeHtml(card.storyline || card.background || "")}</textarea>
+                                <textarea data-role-field="storyline"
+                                        rows="2"
+                                        placeholder="开局关系、长期目标、剧情引导">${escapeHtml(card.storyline || "")}</textarea>
                             </label>
+
                             <label>Persona / 语气
-                                <small class="field-note">AI 强读取</small>
-                                <textarea data-role-field="personaStyle" rows="3" placeholder="压迫、温柔、节奏、口癖">${escapeHtml(personaText)}</textarea>
+                                <small class="field-note gold">AI 强读取</small>
+                                <textarea data-role-field="personaStyle"
+                                        rows="3"
+                                        placeholder="压迫感、温度、节奏、口癖">${escapeHtml(personaText)}</textarea>
                             </label>
+
                             <label>外貌
-                                <textarea data-role-field="appearance" rows="2" placeholder="身形、衣着、风格">${escapeHtml(card.appearance || "")}</textarea>
+                                <textarea data-role-field="appearance"
+                                        rows="2"
+                                        placeholder="身形、衣着、气质、辨识点">${escapeHtml(card.appearance || "")}</textarea>
                             </label>
+
                         </div>
+
                         <div class="card-actions inline">
                             <span class="save-hint" data-required-hint style="display:none;">必填项未完成</span>
                             <button class="ghost" data-action="setup-fill">补全设定</button>
@@ -246,137 +303,147 @@ function renderRole(card) {
                         </div>
                     </section>
                 </div>
+
+                <!-- ===== 仅展示给玩家 ===== -->
                 <div class="info-card ui-panel">
                     <header class="card-head ui-panel-header">仅展示给玩家</header>
                     <section class="card-body ui-panel-body">
-                        <p class="card-note">✘ 此处仅用于展示，不会进入 AI 提示</p>
+                        <p class="card-note">✘ 不会进入 AI Prompt，仅用于界面展示</p>
+
                         <div class="card-form slim">
                             <label>简介（展示标题）
-                                <input type="text" data-role-field="publicProfile" value="${escapeAttr(bioText)}" placeholder="这一段只给玩家看">
+                                <input type="text"
+                                    data-role-field="publicProfile"
+                                    value="${escapeAttr(bioText)}"
+                                    placeholder="这一段只给玩家看">
                             </label>
-                            <label>标签 / 备注（展示副标题）
-                                <textarea data-role-field="bio" rows="2" placeholder="标签、备注、彩蛋">${escapeHtml(card.bio || "")}</textarea>
+
+                            <label>标签 / 备注
+                                <textarea data-role-field="bio"
+                                        rows="2"
+                                        placeholder="标签、备注、彩蛋">${escapeHtml(card.bio || "")}</textarea>
                             </label>
                         </div>
+
                         <div class="card-actions inline">
                             <button class="primary" data-action="save">保存</button>
                         </div>
                     </section>
                 </div>
+
             </div>
         `;
-}
+    }
+
 
     function renderPlayer() {
         const windowId = readWindowId();
+
+        // ===== 全局默认 =====
         const userNameGlobal = getGlobalUserName();
         const userGenderGlobalRaw = getGlobalUserGender() || "男";
         const userHeightGlobal = getGlobalUserHeight() || "";
         const userRefGlobal = (getGlobalUserRef() || "你").trim() || "你";
-        const userProfile = getGlobalUserPersona() || "";
-        const windowPersona = getWindowUserPersonaOverride(windowId, userProfile) || "";
+        const userProfileGlobal = getGlobalUserPersona() || "";
+
+        // ===== 窗口覆盖 =====
         const windowName = getWindowUserNameOverride(windowId, "") || "";
-        const windowGenderRaw = (getWindowUserGenderOverride(windowId, "") || "");
+        const windowGenderRaw = getWindowUserGenderOverride(windowId, "") || "";
         const windowHeight = getWindowUserHeightOverride(windowId, "") || "";
         const windowRef = getWindowUserRefOverride(windowId, userRefGlobal) || "";
-        const refMode = windowRef === "你" ? "second" : windowRef === "我" ? "first" : "third";
-        const refValue = refMode === "first" ? "我" : refMode === "second" ? "你" : "他";
-        const genderGlobalIsAbo = userGenderGlobalRaw.toLowerCase().startsWith("abo");
-        const genderGlobalBase = genderGlobalIsAbo ? "ABO" : userGenderGlobalRaw;
-        const genderGlobalSub = genderGlobalIsAbo ? (userGenderGlobalRaw.split("-")[1] || "Alpha") : "";
-        const genderWindowIsAbo = windowGenderRaw.toLowerCase().startsWith("abo");
-        const genderWindowBase = genderWindowIsAbo ? "ABO" : (windowGenderRaw || genderGlobalBase);
-        const genderWindowSub = genderWindowIsAbo ? (windowGenderRaw.split("-")[1] || "Alpha") : genderGlobalSub;
+        const windowPersona = getWindowUserPersonaOverride(windowId, userProfileGlobal) || "";
+
+        // ===== 性别 / ABO 拆解 =====
+        const parseGender = (raw, fallbackRaw = "") => {
+            const src = raw || fallbackRaw || "男";
+            if (src.toLowerCase().startsWith("abo")) {
+                return {
+                    base: "ABO",
+                    sub: src.split("-")[1] || "Alpha"
+                };
+            }
+            return { base: src, sub: "" };
+        };
+
+        const globalGender = parseGender(userGenderGlobalRaw);
+        const windowGender = parseGender(windowGenderRaw, userGenderGlobalRaw);
+
+        // ===== 人称 =====
+        const refValue = windowRef || userRefGlobal || "你";
+
         return `
             <div class="sheet-grid edit-grid">
                 <div class="info-card ui-panel">
-                    <header class="card-head ui-panel-header">全局人设</header>
-                    <section class="card-body ui-panel-body">
-                        <p class="card-note gold">默认写入所有新窗口，可在窗口内覆盖</p>
-                        <div class="card-form slim">
-                            <label>全局名称
-                                <input type="text" data-player-field="global-name" value="${escapeAttr(userNameGlobal || "")}" placeholder="玩家名称">
-                            </label>
-                            <label>全局性别
-                                <select data-player-field="global-gender" class="pill-select">
-                                    ${GENDER_OPTIONS.map(opt => {
-                                        const val = opt;
-                                        const selected = genderGlobalBase.toLowerCase() === val.toLowerCase() ? "selected" : "";
-                                        return `<option value="${val}" ${selected}>${val}</option>`;
-                                    }).join("")}
-                                </select>
-                            </label>
-                            <label class="abo-sub-row-global" style="${genderGlobalBase.toLowerCase() === "abo" ? "" : "display:none;"}">ABO 分化
-                                <select data-player-field="global-abo-sub" class="pill-select">
-                                    ${ABO_SUB_OPTIONS.map(opt => {
-                                        const selected = genderGlobalSub.toLowerCase() === opt.toLowerCase() ? "selected" : "";
-                                        return `<option value="${opt}" ${selected}>${opt}</option>`;
-                                    }).join("")}
-                                </select>
-                            </label>
-                            <label>全局身高
-                                <input type="text" data-player-field="global-height" value="${escapeAttr(userHeightGlobal)}" placeholder="180 cm">
-                            </label>
-                            <label>全局人称
-                                <select data-player-field="global-ref" class="pill-select">
-                                    ${USER_REF_PRESETS.map(opt => {
-                                        const selected = (userRefGlobal === opt.value) ? "selected" : "";
-                                        return `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
-                                    }).join("")}
-                                </select>
-                            </label>
-                            <label>全局人设文本
-                                <textarea data-player-field="global-profile" rows="4" placeholder="全局人设">${escapeHtml(userProfile)}</textarea>
-                            </label>
-                        </div>
-                        <div class="card-actions inline">
-                            <button class="primary" data-action="save-player-global">保存全局</button>
-                        </div>
-                    </section>
-                </div>
-                <div class="info-card ui-panel">
                     <header class="card-head ui-panel-header">窗口人设</header>
                     <section class="card-body ui-panel-body">
-                        <p class="card-note">留空则沿用全局；可在本窗口覆盖名称/性别/身高/人称/人设</p>
+                        <p class="card-note">
+                            留空将继承全局设定，仅作用于当前聊天窗口。
+                        </p>
+
                         <div class="card-form slim">
                             <label>窗口名称
-                                <input type="text" data-player-field="window-name" value="${escapeAttr(windowName)}" placeholder="${escapeAttr(userNameGlobal || "玩家")}">
+                                <input type="text"
+                                    data-player-field="window-name"
+                                    value="${escapeAttr(windowName)}"
+                                    placeholder="${escapeAttr(userNameGlobal || "玩家")}">
                             </label>
+
                             <label>窗口性别
                                 <select data-player-field="window-gender" class="pill-select">
                                     ${GENDER_OPTIONS.map(opt => {
-                                        const val = opt;
-                                        const selected = genderWindowBase.toLowerCase().startsWith(val.toLowerCase()) ? "selected" : "";
-                                        return `<option value="${val}" ${selected}>${val}</option>`;
-                                    }).join("")}
-                                </select>
-                            </label>
-                            <label class="abo-sub-row-window" style="${genderWindowBase.toLowerCase().includes("abo") ? "" : "display:none;"}">ABO 分化
-                                <select data-player-field="window-abo-sub" class="pill-select">
-                                    ${ABO_SUB_OPTIONS.map(opt => {
-                                        const selected = genderWindowSub.toLowerCase() === opt.toLowerCase() ? "selected" : "";
+                                        const selected =
+                                            windowGender.base.toLowerCase() === opt.toLowerCase()
+                                                ? "selected"
+                                                : "";
                                         return `<option value="${opt}" ${selected}>${opt}</option>`;
                                     }).join("")}
                                 </select>
                             </label>
-                            <label>窗口身高
-                                <input type="text" data-player-field="window-height" value="${escapeAttr(windowHeight)}" placeholder="${escapeAttr(userHeightGlobal || "身高")}">
+
+                            <label class="abo-sub-row-window"
+                                style="${windowGender.base === "ABO" ? "" : "display:none;"}">
+                                ABO 分化
+                                <select data-player-field="window-abo-sub" class="pill-select">
+                                    ${ABO_SUB_OPTIONS.map(opt => {
+                                        const selected =
+                                            windowGender.sub.toLowerCase() === opt.toLowerCase()
+                                                ? "selected"
+                                                : "";
+                                        return `<option value="${opt}" ${selected}>${opt}</option>`;
+                                    }).join("")}
+                                </select>
                             </label>
+
+                            <label>窗口身高
+                                <input type="text"
+                                    data-player-field="window-height"
+                                    value="${escapeAttr(windowHeight)}"
+                                    placeholder="${escapeAttr(userHeightGlobal || "身高")}">
+                            </label>
+
                             <label>窗口人称
                                 <select data-player-field="window-ref" class="pill-select">
                                     ${USER_REF_PRESETS.map(opt => {
-                                        const selected = (refMode === "first" && opt.value === "我") || (refMode === "second" && opt.value === "你") || (refMode === "third" && opt.value === "他") ? "selected" : "";
+                                        const selected = refValue === opt.value ? "selected" : "";
                                         return `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
                                     }).join("")}
                                 </select>
                             </label>
+
                             <label>窗口人设（单段文本）
-                                <textarea data-player-field="window-profile" rows="6" placeholder="留空则使用全局人设">${escapeHtml(windowPersona)}</textarea>
+                                <textarea rows="6"
+                                        data-player-field="window-profile"
+                                        placeholder="留空则使用全局人设">${escapeHtml(windowPersona)}</textarea>
                             </label>
                         </div>
+
                         <div class="card-actions inline">
-                            <button class="ghost" data-action="reset-player">恢复全局默认</button>
-                            <button class="primary" data-action="save-player">保存窗口人设</button>
+                            <button class="ghost" data-action="reset-player">
+                                恢复全局默认
+                            </button>
+                            <button class="primary" data-action="save-player">
+                                保存窗口人设
+                            </button>
                         </div>
                     </section>
                 </div>

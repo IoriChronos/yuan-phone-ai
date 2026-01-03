@@ -3,7 +3,15 @@ import { getPersonaMemoryText, getSTM, getLTM, getRawReplies, getMatcherEnabled,
 import { getWorldState } from "../data/world-state.js";
 import { resolveWindowId } from "./window-context.js";
 
-const OLLAMA_ENDPOINT = "http://localhost:11434/api/generate";
+const AI_BASE =
+  location.hostname === "localhost"
+    ? "http://localhost:11434"
+    : `http://10.132.102.5:11434`;
+
+const OLLAMA_ENDPOINT = `${AI_BASE}/api/generate`;
+
+
+//const OLLAMA_ENDPOINT = "http://localhost:11434/api/generate";
 const OLLAMA_MODEL = "llama3.1:8b";
 const FALLBACK_REPLY = "【LOCAL-OLLAMA】(empty output)";
 

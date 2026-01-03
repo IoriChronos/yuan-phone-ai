@@ -45,11 +45,14 @@ body {
 .home-dialog-panel .ui-input-field,
 .persona-card .ui-input,
 .persona-card .ui-input-field {
-    box-shadow: none;
-    border: none;
-    background: transparent;
     padding-left: 0;
     padding-right: 0;
+}
+.home-rule-inner .ui-input-field,
+.home-dialog-panel .ui-input-field,
+.persona-card .ui-input-field {
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 .home-card-upload .ui-input {

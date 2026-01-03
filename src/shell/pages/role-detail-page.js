@@ -3,26 +3,40 @@ import { navigateTo } from "./nav.js";
 import { saveToast } from "../../core/save-feedback.js";
 import { runSetupAssistant } from "../../core/ai.js";
 
-const GENDER_OPTIONS = ["男", "女", "双性", "无性别", "ABO"];
+const GENDER_OPTIONS = ["男", "女", "双性", "无性别"];
+const ABO_SUB_OPTIONS = [
+    { value: "", label: "无（不使用 ABO，留空即可）" },
+    { value: "Alpha", label: "Alpha" },
+    { value: "Beta", label: "Beta" },
+    { value: "Omega", label: "Omega" },
+    { value: "Enigma", label: "Enigma" },
+    { value: "背景补充", label: "背景补充" }
+]; 
 
 export function renderRoleDetail(root, params) {
     root.innerHTML = "";
     root.className = "role-detail-page";
+
     const [, id] = params.parts || [];
     const roleId = id || "";
     const isNew = !roleId || roleId === "new";
+
     const state = getState();
     const role = isNew ? {} : state.roles.find(r => r.id === roleId);
-    const sexValue = (role?.sex || "男").toLowerCase();
-    const height = role?.height || "";
+
     if (!role && !isNew) {
         root.innerHTML = `<p class="empty">未找到角色。</p>`;
         return { unmount() {} };
     }
+
+    const sexValue = (role?.sex || "男").toLowerCase();
+
     const form = document.createElement("div");
     form.className = "role-detail-form";
+
     form.innerHTML = `
         <div class="role-detail-shell">
+
             <div class="role-detail-head ui-page-header">
                 <div class="ui-page-title">
                     <p class="roles-kicker">${isNew ? "新建" : "编辑"}角色</p>
@@ -32,7 +46,10 @@ export function renderRoleDetail(root, params) {
                     <button class="ghost" data-act="back">← 返回</button>
                 </div>
             </div>
+
             <div class="role-detail-grid">
+
+                <!-- ===== AI 会读入 ===== -->
                 <section class="role-card ui-panel">
                     <header class="role-card-head ui-panel-header">
                         <div>
@@ -41,46 +58,106 @@ export function renderRoleDetail(root, params) {
                         </div>
                         <span class="role-chip">PROMPT</span>
                     </header>
+
                     <section class="role-card-body ui-panel-body">
-                        <p class="role-card-note">✔ 以下字段每轮注入 Narrator Prompt</p>
+                        <p class="role-card-note">
+                            ✔ 以下字段每轮注入 Narrator Prompt<br>
+                            🔒 标记为锁定的字段辅助 AI 不会修改
+                        </p>
+
                         <div class="role-field-grid grid-two">
+
                             <label>角色名称 <span class="required">*</span>
-                                <input type="text" data-role-field="name" placeholder="角色名称" value="${escapeAttr(role.name || "")}">
+                                <input type="text"
+                                       data-role-field="name"
+                                       placeholder="角色名称"
+                                       value="${escapeAttr(role.name || "")}">
                             </label>
-                            <label>性别 <span class="required">*</span>
-                                <select data-role-field="sex" class="pill-select">
-                                    ${GENDER_OPTIONS.map(option => {
-                                        const val = option.toLowerCase();
-                                        const label = option === "ABO" ? "ABO" : option;
-                                        const selected = sexValue === val ? "selected" : "";
-                                        return `<option value="${label}" ${selected}>${label}</option>`;
-                                    }).join("")}
-                                </select>
-                            </label>
+
+                        <label>性别 <span class="required">*</span>
+                            <select data-role-field="sex" class="pill-select">
+                                ${GENDER_OPTIONS.map(option => {
+                                    const val = option.toLowerCase();
+                                    const label = option;
+                                    const selected = (role.sex || "男").toLowerCase() === val ? "selected" : "";
+                                    return `<option value="${label}" ${selected}>${label}</option>`;
+                                }).join("")}
+                            </select>
+                        </label>
+
+                        <label>ABO 分化
+                            <select data-role-field="aboSub" class="pill-select">
+                                ${ABO_SUB_OPTIONS.map(opt => {
+                                    const selected =
+                                        (role.aboSub || "").toLowerCase() === opt.toLowerCase()
+                                            ? "selected"
+                                            : "";
+                                    return `<option value="${opt}" ${selected}>${opt}</option>`;
+                                }).join("")}
+                            </select>
+                        </label>
+
                             <label>种族 / 形态 <span class="required">*</span>
-                                <input type="text" data-role-field="species" placeholder="人 / 黑雾" value="${escapeAttr(role.species || "人")}">
+                                <input type="text"
+                                       data-role-field="species"
+                                       placeholder="物种，种族都可以"
+                                       value="${escapeAttr(role.species || "")}">
                             </label>
+
                             <label>身高
-                                <input type="text" data-role-field="height" placeholder="180 cm / 5'11\\\"（可空）" value="${escapeAttr(height)}">
+                                <input type="text"
+                                       data-role-field="height"
+                                       placeholder="180 cm / 5'11\\\""
+                                       value="${escapeAttr(role.height || "")}">
                             </label>
+
                             <label>世界标签
-                                <input type="text" data-role-field="worldTag" placeholder="现代都市 / 末日" value="${escapeAttr(role.worldTag || "")}">
+                                <input type="text"
+                                       data-role-field="worldTag"
+                                       placeholder="现代都市 / 末日"
+                                       value="${escapeAttr(role.worldTag || "")}">
                             </label>
+
                             <label>世界背景
-                                <textarea rows="2" data-role-field="worldLore" placeholder="世界观、规则">${escapeHtml(role.worldLore || "")}</textarea>
+                                <textarea rows="2"
+                                          data-role-field="worldLore"
+                                          placeholder="世界观、规则">${escapeHtml(role.worldLore || "")}</textarea>
                             </label>
-                            <label>外貌
-                                <textarea rows="2" data-role-field="appearance" placeholder="身形、衣着、风格">${escapeHtml(role.appearance || "")}</textarea>
+
+                            <label>角色背景 / 过往
+                                <textarea rows="2"
+                                          data-role-field="background"
+                                          placeholder="经历、立场、已发生事件">${escapeHtml(role.background || "")}</textarea>
                             </label>
+
+                            <label>故事线 / 引导
+                                <textarea rows="2"
+                                          data-role-field="storyline"
+                                          placeholder="长期目标、剧情提醒">${escapeHtml(role.storyline || "")}</textarea>
+                            </label>
+
                             <label>Persona / 语气
-                                <textarea rows="3" data-role-field="personaStyle" placeholder="语气、节奏、口癖">${escapeHtml(role.personaStyle || "")}</textarea>
+                                <small class="field-note gold">AI 强读取</small>
+                                <textarea rows="3"
+                                          data-role-field="personaStyle"
+                                          placeholder="节奏、压迫感、温度、口癖">${escapeHtml(role.personaStyle || "")}</textarea>
                             </label>
+
+                            <label>外貌
+                                <textarea rows="2"
+                                          data-role-field="appearance"
+                                          placeholder="身形、衣着、辨识点">${escapeHtml(role.appearance || "")}</textarea>
+                            </label>
+
                         </div>
+
                         <div class="role-card-actions">
                             <button class="ghost" data-act="setup-fill">补全设定</button>
                         </div>
                     </section>
                 </section>
+
+                <!-- ===== 仅展示给玩家 ===== -->
                 <section class="role-card ui-panel">
                     <header class="role-card-head ui-panel-header">
                         <div>
@@ -89,58 +166,87 @@ export function renderRoleDetail(root, params) {
                         </div>
                         <span class="role-chip ghost-chip">VIEW</span>
                     </header>
+
                     <section class="role-card-body ui-panel-body">
-                        <p class="role-card-note">✘ 不会注入 Prompt，只用于界面展示</p>
+                        <p class="role-card-note">✘ 不会注入 Prompt，仅用于界面展示</p>
+
                         <div class="role-field-grid">
                             <label>简介（展示）
-                                <input type="text" data-role-field="publicProfile" placeholder="这一段只给玩家看" value="${escapeAttr(role.publicProfile || role.bio || "")}">
+                                <input type="text"
+                                       data-role-field="publicProfile"
+                                       placeholder="这一段只给玩家看"
+                                       value="${escapeAttr(role.publicProfile || role.bio || "")}">
                             </label>
+
                             <label>标签 / 备注
-                                <textarea rows="2" data-role-field="bio" placeholder="补充描述">${escapeHtml(role.bio || "")}</textarea>
+                                <textarea rows="2"
+                                          data-role-field="bio"
+                                          placeholder="标签、备注、彩蛋">${escapeHtml(role.bio || "")}</textarea>
                             </label>
                         </div>
                     </section>
                 </section>
+
             </div>
+
             <div class="role-detail-actions">
                 <span class="role-required-hint" data-required-hint style="display:none;">请补齐必填项</span>
                 <button class="ghost" data-act="back">取消</button>
                 <button class="primary" data-act="save">保存</button>
             </div>
+
         </div>
     `;
+
     root.appendChild(form);
 
+    
+    /* ===== 事件逻辑（原样保留） ===== */
+
     const goBack = () => navigateTo("#/roles");
-    form.querySelectorAll("[data-act='back']").forEach(btn => btn.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        goBack();
-    }));
+
+    form.querySelectorAll("[data-act='back']").forEach(btn =>
+        btn.addEventListener("click", ev => {
+            ev.preventDefault();
+            goBack();
+        })
+    );
+
     const requiredHint = form.querySelector("[data-required-hint]");
     const saveBtn = form.querySelector("[data-act='save']");
     const nameField = form.querySelector("[data-role-field='name']");
     const sexField = form.querySelector("[data-role-field='sex']");
     const speciesField = form.querySelector("[data-role-field='species']");
+
     const validateRequired = () => {
-        const ok = Boolean((nameField?.value || "").trim()) && Boolean((sexField?.value || "").trim()) && Boolean((speciesField?.value || "").trim());
+        const ok =
+            Boolean((nameField?.value || "").trim()) &&
+            Boolean((sexField?.value || "").trim()) &&
+            Boolean((speciesField?.value || "").trim());
+
         if (saveBtn) saveBtn.disabled = !ok;
         if (requiredHint) requiredHint.style.display = ok ? "none" : "inline-flex";
     };
+
     nameField?.addEventListener("input", validateRequired);
     sexField?.addEventListener("change", validateRequired);
     speciesField?.addEventListener("input", validateRequired);
     validateRequired();
+
     form.querySelector("[data-act='setup-fill']")?.addEventListener("click", async () => {
         const preference = await promptSetupPreference();
         if (preference === null) return;
+
         const payload = collectRolePayload(form, role || {});
         const baseCard = { ...role, ...payload };
+
         try {
             const result = await runSetupAssistant(baseCard, preference);
             if (!result || !Object.keys(result).length) {
                 saveToast(false, "没有可补全的字段");
                 return;
             }
+
             Object.entries(result).forEach(([key, val]) => {
                 if (!baseCard[key] && typeof val === "string" && val.trim()) {
                     baseCard[key] = val.trim();
@@ -148,23 +254,27 @@ export function renderRoleDetail(root, params) {
                     if (el) el.value = val.trim();
                 }
             });
+
             if (!isNew) {
                 updateRole(roleId, baseCard);
                 saveToast(true, "设定已补全并保存");
             } else {
                 saveToast(true, "设定已补全，记得保存角色");
             }
+
         } catch (err) {
-            console.error("[SetupAssistant] home role failed", err);
+            console.error("[SetupAssistant] role detail failed", err);
             saveToast(false, "补全失败");
         }
     });
+
     form.querySelector("[data-act='save']")?.addEventListener("click", () => {
         const payload = collectRolePayload(form, role || {});
         if (!payload.name || !payload.sex || !payload.species) {
             validateRequired();
             return;
         }
+
         try {
             if (isNew) {
                 const created = addRole(payload);
@@ -174,15 +284,13 @@ export function renderRoleDetail(root, params) {
                 updateRole(roleId, payload);
                 saveToast(true, "角色已保存");
             }
-            if (typeof console !== "undefined" && console.debug) {
-                console.debug("[Shell] role saved", { roleId: isNew ? "new" : roleId, name: payload.name, worldTag: payload.worldTag });
-            }
             goBack();
         } catch (err) {
             console.error("角色保存失败", err);
             saveToast(false, "角色保存失败");
         }
     });
+
     return { unmount() {} };
 }
 

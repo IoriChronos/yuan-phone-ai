@@ -23,7 +23,6 @@
     padding: var(--ui-space-6);
     border-radius: var(--ui-radius-md);
     border: 1px solid var(--ui-border);
-    background: var(--ui-surface-1);
     box-shadow: var(--ui-shadow-soft);
     list-style: none;
     margin: 0;
@@ -32,8 +31,17 @@
     overflow-y: auto;
 }
 
+.ui-select-menu {
+    background: var(--ui-select-menu, #121212);
+    backdrop-filter: none;
+}
+
 .ui-select-menu[hidden] {
-    display: none;
+    display: none !important;
+}
+
+.ui-select:not(.open) .ui-select-menu {
+  display: none !important;
 }
 
 .ui-select-option {
